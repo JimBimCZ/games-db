@@ -6,7 +6,6 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
-  real,
   smallint,
   text,
   timestamp,
