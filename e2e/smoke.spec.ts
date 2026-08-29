@@ -14,7 +14,7 @@ test('shell renders and the sign-in control is reachable', async ({ page }) => {
 
 test('theme choice survives a reload', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: /Switch to dark appearance/ }).click()
+  await page.getByRole('button', { name: 'Toggle light and dark appearance' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await page.reload()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
