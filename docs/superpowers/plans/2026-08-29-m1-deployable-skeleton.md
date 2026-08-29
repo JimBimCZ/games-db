@@ -104,6 +104,7 @@ Do **not** run `create-next-app` — the directory already holds `CLAUDE.md`, `L
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
