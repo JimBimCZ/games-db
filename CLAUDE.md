@@ -4,7 +4,7 @@ Guidance for AI agents working in this repository.
 
 ## Project
 
-A personal PC games catalogue app. It pulls game data from Steam's storefront API and presents it in a Netflix-style browsing UI: hero banner, horizontally scrolling rows (New Releases, Top Sellers, Specials, Coming Soon, by genre and tag), detail pages, and search. Signed-in users can add games to a personal library and track status and price.
+A personal PC games catalogue app. It pulls game data from Steam's storefront API and presents it in a macOS App Store-style browsing UI: sidebar, toolbar, a featured hero, and card grids (New Releases, Top Sellers, Specials, Coming Soon, by genre and tag) — no carousels — plus detail pages and search. Signed-in users can add games to a personal library and track status and price.
 
 Steam is the source of catalogue data. Our database stores users, library entries, and a cache of Steam responses — plus one thing the movies equivalent of this app does not need: a local index of the Steam app catalogue, because Steam has no browse-and-filter endpoint (see "Steam integration").
 
@@ -18,7 +18,13 @@ Steam is the source of catalogue data. Our database stores users, library entrie
 
 Do not introduce a new library, ORM, state manager, or UI kit without asking first. If a task seems to need one, say what it would solve and let the human decide.
 
+Approved beyond the core stack above: Vitest, Zod, `@auth/drizzle-adapter`, Playwright, hls.js, isomorphic-dompurify.
+
 ## Agent rules
+
+### Working agreement
+
+Every meaningful increment ends as a pull request: branch → commit → push → `gh pr create`. Nothing is pushed straight to `main`.
 
 ### Prove before asserting
 
@@ -74,13 +80,17 @@ Two different hosts, with different rules. Confirm current behaviour before rely
 - **`store.steampowered.com/appreviews/<appid>?json=1`** — review data, and unusually for our purposes it *is* documented in the Steamworks docs, with cursor-based pagination.
 - **`api.steampowered.com/...`** — the official Steamworks Web API. Some methods need a key, some do not. Many methods have undocumented per-method rate limits; when limited it typically returns HTTP 429, or an `x-eresult` of 25 or 84.
 
+### Review data policy
+
+`appreviews/<appid>` is always called with `num_per_page=0&purchase_type=all`. `purchase_type` must be pinned — it defaults to `steam` and the totals move with it (a ~6% swing observed between `purchase_type=steam` and `purchase_type=all`), so pinning `all` keeps stored counts comparable over time instead of drifting when Valve changes the default. We store only the aggregate `query_summary` (`review_score`, `review_score_desc`, `total_positive`, `total_negative`, `total_reviews`). Review bodies and author identifiers (`steamid`, `personaname`, `avatar`, `profile_url`, `playtime_forever`) are never fetched, stored, or rendered — `num_per_page=0` means the bodies never arrive in the first place, not merely that we discard them. They are personal data, and Steam gives us no signal when a user edits or deletes a review, so keeping them would create a retention and erasure obligation we cannot honour.
+
 ### The constraint that shapes the architecture
 
 Steam has no endpoint equivalent to TMDB's `/trending` or `/discover`. There is no "give me action games released in 2026, sorted by rating, page 3". Detail lookups are per-appid, and the storefront API has been rate limited to roughly 200 requests per 5 minutes since 2015, with multiple appids no longer working for full detail in a single request.
 
 This means the app cannot be a thin proxy. It must maintain its own index:
 
-1. `pnpm sync:catalogue` pulls the full app list from the Web API and upserts appids and names into a `steam_app` table. Verify the current endpoint and response shape before writing the sync — do not assume.
+1. `pnpm sync:catalogue` pulls the full app list from `IStoreService/GetAppList` (`ISteamApps/GetAppList` is gone — v1 and v2 both 404) and upserts appids and names into a `steam_app` table. Its request parameters and response shape have not been verified — that call needs `STEAM_API_KEY`, which does not exist yet. Verify both against a live response before writing the sync — do not assume.
 2. A background hydration job walks that table and fills in detail from `appdetails`, one appid at a time, respecting a conservative self-imposed rate limit with backoff on 429.
 3. All browse, filter, and search queries in the app hit our own tables. They never fan out to Steam.
 4. `appdetails` is called live only for a game the user has explicitly opened and that has no fresh cache row.
@@ -96,10 +106,11 @@ Never write a code path that calls Steam once per item in a list. If you find yo
 
 ### Requests
 
-- Always send `cc` and `l`. Prices come back in the currency implied by `cc`; we use `cc=cz` so the app shows CZK. Do not convert currencies ourselves.
+- Always send `cc` and `l`. We use `cc=cz`, but Steam prices Czechia in EUR, not CZK — verified live across `cc=cz` (EUR), `cc=us` (USD), `cc=gb` (GBP), and `cc=pl` (PLN). Never assume the currency from `cc`; always read it from `price_overview.currency` in the response and store it alongside the amount. Do not convert currencies ourselves.
 - Read prices from the minor-unit integer field, not the preformatted string, and format for display with `Intl.NumberFormat`.
 - All Steam calls happen server-side. The browser never talks to `store.steampowered.com`.
-- Image URLs come from the Steam CDN. Confirm the current hostname and path pattern from a live response before adding it to `next.config.js` remote patterns — the hostnames have changed more than once.
+- Only `filters=price_overview` accepts multiple appids in one `appdetails` request. `filters=basic` and a bare multi-appid request (no `filters`) both return a `null` body — verified live. Everything except a price refresh is strictly one appid per request.
+- Image URLs come from the Steam CDN. Confirm the current hostname and path pattern from a live response before adding it to `next.config.js` remote patterns — the hostnames have changed more than once. Capsule paths are not derivable from the appid — they contain a per-app hash segment (e.g. `/steam/apps/292030/e4364da910766631c924b6a639ea84681791160a/capsule_231x87_alt_assets_4.jpg`). Always store and read the URL from the payload; never construct one.
 
 ### Known limitations to design around, not paper over
 
@@ -120,8 +131,8 @@ Never write a code path that calls Steam once per item in a list. If you find yo
 
 ## UI conventions
 
-- Server components by default. `'use client'` only where interactivity genuinely requires it — carousel scroll state, library status control, search input.
-- Row carousels are horizontally scrollable with keyboard and touch support, and lazily load capsule art below the fold.
+- Server components by default. `'use client'` only where interactivity genuinely requires it — the theme toggle, library status control, search input, video player.
+- Card grids (not carousels) use Steam's landscape capsule art and lazily load it below the fold.
 - The library status control updates optimistically and rolls back on failure.
 - Every interactive element is reachable by keyboard and has an accessible name. Capsule art has alt text with the game title.
 - Loading states are skeletons matching the final layout, not spinners.
@@ -141,7 +152,7 @@ Never write a code path that calls Steam once per item in a list. If you find yo
 ```
 DATABASE_URL            # Neon pooled connection string
 DATABASE_URL_UNPOOLED   # direct connection, migrations only
-STEAM_API_KEY           # only if a Web API method we use requires one — verify before adding
+STEAM_API_KEY           # required, not optional — IStoreService/GetAppList returns 403 without it
 STEAM_COUNTRY_CODE      # defaults to cz
 AUTH_SECRET
 AUTH_URL                # required in the container path
