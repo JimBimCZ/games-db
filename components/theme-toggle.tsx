@@ -38,10 +38,15 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} appearance`}
+      aria-label="Toggle light and dark appearance"
       className="rounded-md border border-line px-2 py-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
     >
-      {theme === 'dark' ? 'Light' : 'Dark'}
+      <span aria-hidden="true" className="theme-toggle-to-dark">
+        Dark
+      </span>
+      <span aria-hidden="true" className="theme-toggle-to-light">
+        Light
+      </span>
     </button>
   )
 }

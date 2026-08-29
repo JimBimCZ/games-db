@@ -2,7 +2,7 @@ import { signInAction } from '@/server/auth/actions'
 
 export default function SignInPage() {
   return (
-    <main className="flex min-h-dvh items-center justify-center p-6">
+    <div className="flex h-full items-center justify-center p-6">
       <div className="w-full max-w-sm rounded-xl border border-line bg-bg-panel p-6">
         <h1 className="text-base font-semibold">Sign in to Games</h1>
         <p className="mt-1 text-text-dim">
@@ -17,6 +17,6 @@ export default function SignInPage() {
           </button>
         </form>
       </div>
-    </main>
+    </div>
   )
 }

@@ -60,6 +60,36 @@ body {
   color: var(--text);
 }
 
+.theme-toggle-to-dark {
+  display: inline;
+}
+
+.theme-toggle-to-light {
+  display: none;
+}
+
+:root:not([data-theme='light']) {
+  @media (prefers-color-scheme: dark) {
+    .theme-toggle-to-dark {
+      display: none;
+    }
+
+    .theme-toggle-to-light {
+      display: inline;
+    }
+  }
+}
+
+:root[data-theme='dark'] {
+  .theme-toggle-to-dark {
+    display: none;
+  }
+
+  .theme-toggle-to-light {
+    display: inline;
+  }
+}
+
 @layer base {
   button:not(:disabled),
   [role='button']:not(:disabled) {
