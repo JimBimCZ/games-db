@@ -212,13 +212,14 @@ export const price = pgTable(
   ],
 )
 
+// No foreign key on appid: price history is the only thing here Steam cannot re-serve, and it
+// must outlive the game rows it describes — a re-hydration or a prune of delisted apps would
+// otherwise cascade it away.
 export const priceHistory = pgTable(
   'price_history',
   {
     id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-    appid: integer('appid')
-      .notNull()
-      .references(() => game.appid, { onDelete: 'cascade' }),
+    appid: integer('appid').notNull(),
     cc: text('cc').notNull(),
     currency: text('currency').notNull(),
     initialMinor: integer('initial_minor').notNull(),

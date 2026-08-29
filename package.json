@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "next typegen && tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",
     "test": "vitest run",
     "test:db": "vitest run --config vitest.db.config.ts",
     "test:e2e": "playwright test",

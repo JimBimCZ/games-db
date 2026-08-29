@@ -10,6 +10,7 @@
   --line: rgba(0, 0, 0, 0.11);
   --accent: #0a74f0;
   --positive: #0a8f3c;
+  --hover: rgba(0, 0, 0, 0.05);
   color-scheme: light;
 }
 
@@ -24,6 +25,7 @@
     --line: rgba(255, 255, 255, 0.1);
     --accent: #0a84ff;
     --positive: #30d158;
+    --hover: rgba(255, 255, 255, 0.1);
     color-scheme: dark;
   }
 }
@@ -38,6 +40,7 @@
   --line: rgba(255, 255, 255, 0.1);
   --accent: #0a84ff;
   --positive: #30d158;
+  --hover: rgba(255, 255, 255, 0.1);
   color-scheme: dark;
 }
 
@@ -51,6 +54,7 @@
   --color-line: var(--line);
   --color-accent: var(--accent);
   --color-positive: var(--positive);
+  --color-hover: var(--hover);
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial,
     sans-serif;
 }

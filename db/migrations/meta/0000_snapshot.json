@@ -1,5 +1,5 @@
 {
-  "id": "5f97855e-b72c-44cb-87bb-579b5e8d4316",
+  "id": "88a68dcb-34d4-457c-a1e6-e3f76440e365",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1082,21 +1082,7 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "price_history_appid_game_appid_fk": {
-          "name": "price_history_appid_game_appid_fk",
-          "tableFrom": "price_history",
-          "tableTo": "game",
-          "columnsFrom": [
-            "appid"
-          ],
-          "columnsTo": [
-            "appid"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
