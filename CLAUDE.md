@@ -65,8 +65,18 @@ pnpm db:migrate       # apply migrations
 pnpm db:studio        # inspect data
 pnpm sync:catalogue   # refresh the local Steam app index (see below)
 docker build -t games-app .
-docker run --env-file .env.local -p 3001:3000 games-app
+
+# vercel env pull writes double-quoted values and docker --env-file does not strip
+# quotes, so DATABASE_URL would arrive with literal quotes and every query fails.
+sed -E 's/^([A-Z_]+)="(.*)"$/\1=\2/' .env.local > .env.docker
+docker run --env-file .env.docker -p 3001:3000 games-app
 ```
+
+The container needs `AUTH_URL` set to the origin it is actually reached on
+(`http://localhost:3001` for the command above). Without it Auth.js rejects every
+request with `UntrustedHost`. `AUTH_TRUST_HOST=true` silences that error but leaves the
+callback URL as `http://0.0.0.0:3000/...`, which GitHub then refuses — it is not a
+substitute.
 
 Run the real command before reporting on it. Do not report the outcome of a command you did not run.
 
@@ -157,7 +167,8 @@ STEAM_COUNTRY_CODE      # defaults to cz
 AUTH_SECRET
 AUTH_GITHUB_ID          # GitHub OAuth app, the only sign-in provider
 AUTH_GITHUB_SECRET
-AUTH_URL                # required in the container path
+AUTH_URL                # container only: the public origin, no /api/auth suffix.
+                        # Vercel infers it from request headers; leave it unset there.
 ```
 
 Local values live in `.env.local`, which is gitignored. Never commit real credentials, never print them in logs or terminal output, and never paste them into a file you create.
