@@ -112,12 +112,36 @@ in-browser playback works with a library.
 
 ### 1.7 Reviews
 
-`store.steampowered.com/appreviews/<appid>?json=1&filter=all&day_range=365&num_per_page=N`
-returns reviews ordered by `weighted_vote_score` descending (observed 0.980, 0.949,
-0.944) — this is our "highest rated" ordering. `query_summary` carries
-`review_score`, `review_score_desc`, `total_positive`, `total_negative`,
-`total_reviews`. Each review's `author` has `steamid`, `personaname`, `avatar`,
-`profile_url`, `playtime_forever`.
+`store.steampowered.com/appreviews/<appid>?json=1&num_per_page=0&purchase_type=all`
+returns a `query_summary` carrying `review_score`, `review_score_desc` ("Very
+Positive"), `total_positive`, `total_negative`, `total_reviews`, and — verified —
+an empty `reviews` array.
+
+**`purchase_type` must be pinned.** It defaults to `steam`, and the totals move
+with it:
+
+```
+default              total=310349  (+285634/-24715)
+purchase_type=steam  total=310349  (identical — confirms the default)
+purchase_type=all    total=329951  (+303463/-26488)
+language=english     total=310349  (no effect on the summary)
+day_range=365        total=310349  (no effect on the summary)
+```
+
+A ~6% swing. We send `purchase_type=all` explicitly so stored counts stay
+comparable over time rather than drifting when Valve changes a default.
+
+The endpoint will also return review bodies — ordered by `weighted_vote_score`
+descending when queried with `filter=all&day_range=365` (observed 0.980, 0.949,
+0.944) — with an `author` block containing `steamid`, `personaname`, `avatar`,
+`profile_url` and `playtime_forever`.
+
+**Decision: we store none of that.** Only the aggregate `query_summary` is
+persisted. Review bodies and author identifiers are personal data; keeping them in
+our database would create a retention and erasure obligation we cannot honour,
+because Steam gives us no signal when a user edits or deletes a review. Their being
+publicly visible on Steam does not make them ours to hold. `num_per_page=0` means
+the bodies are never fetched in the first place, not merely discarded after arrival.
 
 ### 1.8 Not available from Steam
 
@@ -150,7 +174,8 @@ returns reviews ordered by `weighted_vote_score` descending (observed 0.980, 0.9
 | UI direction | macOS app: sidebar + toolbar chrome, App Store-style content pane |
 | Theme | Light **and** dark (`my_movies` is dark-only) |
 | Video | `hls.js`, lazy-loaded on the detail page only; Safari uses native HLS |
-| Sanitiser | `isomorphic-dompurify`, applied at write time before caching |
+| Reviews | Aggregate score only. No review text, no author data, ever stored or displayed |
+| Sanitiser | `isomorphic-dompurify` on Steam's description HTML, applied at write time before caching |
 | Approved extra deps | Vitest, Zod, `@auth/drizzle-adapter`, Playwright, hls.js, isomorphic-dompurify |
 
 ### Working agreement
@@ -218,9 +243,9 @@ Auth.js adapter tables: `users`, `accounts`, `sessions`, `verification_tokens`.
 
 - `review_summary` — `appid` PK, `review_score`, `review_score_desc`,
   `total_positive`, `total_negative`, `total_reviews`, `fetched_at`
-- `review` — `recommendationid` PK, `appid`, author fields, `voted_up`, `votes_up`,
-  `weighted_vote_score`, `playtime_forever_min`, `review_html` (sanitised),
-  `timestamp_created`, `fetched_at`. We keep only the top handful per app.
+
+There is deliberately no table for individual reviews. See §1.7: we hold aggregates
+only, and never fetch review bodies or author identifiers.
 
 **Library**
 
@@ -276,9 +301,11 @@ explicit `[data-theme]` attribute so the toggle wins in either direction.
 art — deliberately not portrait posters, and no horizontal carousels.
 
 **Detail.** Hero from `background_raw`; left column carries the hls.js trailer
-player, screenshot gallery, sanitised About, and top reviews; right rail carries the
-price card (discount, struck-through original, final), review score, Metacritic,
-recommendations, achievements, developer, publisher, platforms. Plus, all in scope:
+player, screenshot gallery, and the sanitised About; right rail carries the price
+card (discount, struck-through original, final), the review score as a bar and
+label ("Very Positive · 303,463 of 329,951"), Metacritic, recommendations,
+achievements, developer, publisher, platforms. No review text or reviewer
+identities appear anywhere in the UI. Plus, all in scope:
 system requirements, DLC and editions, the full language table, content warnings,
 and the price-history chart.
 
@@ -306,7 +333,8 @@ then build `sync:catalogue`.
 
 **M4 — Browse.** Discover, Specials, Coming Soon, New Releases, genre pages, search.
 
-**M5 — Detail page.** Including video, gallery, reviews, and the five extra sections.
+**M5 — Detail page.** Including video, gallery, the aggregate review score, and the
+five extra sections.
 
 **M6 — Library and wishlist.** Status control, transition history, price deltas.
 
@@ -328,6 +356,9 @@ To be applied in M1 so the file stops contradicting the app:
 6. Add: image URLs are read from payloads, never constructed.
 7. Add: only `filters=price_overview` accepts multiple appids.
 8. Replace the `ISteamApps/GetAppList` sync description with `IStoreService`.
+9. Add the review-data policy: aggregates only, requested with `num_per_page=0`
+   and `purchase_type=all`; review bodies and author identifiers are never
+   fetched, stored, or rendered.
 
 ---
 
