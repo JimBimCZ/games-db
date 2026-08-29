@@ -12,6 +12,10 @@ describe('parseServerEnv', () => {
   })
 
   it('fails loudly when DATABASE_URL is missing', () => {
-    expect(() => parseServerEnv({})).toThrow(/DATABASE_URL/)
+    expect(() => parseServerEnv({})).toThrow(/DATABASE_URL is not set/)
+  })
+
+  it('fails loudly when DATABASE_URL is empty', () => {
+    expect(() => parseServerEnv({ DATABASE_URL: '' })).toThrow(/DATABASE_URL is not set/)
   })
 })
