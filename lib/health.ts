@@ -7,7 +7,8 @@ export async function checkHealth(probe: () => Promise<unknown>): Promise<Health
   try {
     await probe()
     return { status: 'ok', database: 'ok' }
-  } catch {
+  } catch (err) {
+    console.error('health probe failed:', err instanceof Error ? err.message : 'non-Error thrown')
     return { status: 'degraded', database: 'unavailable' }
   }
 }

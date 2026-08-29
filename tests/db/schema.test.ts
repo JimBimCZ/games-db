@@ -2,7 +2,7 @@ import { is } from 'drizzle-orm'
 import { getTableConfig, PgTable } from 'drizzle-orm/pg-core'
 import { describe, expect, it } from 'vitest'
 import * as schema from '@/db/schema'
-import { libraryEntry, libraryStatus, price } from '@/db/schema'
+import { libraryEntry, libraryStatus, price, reviewSummary } from '@/db/schema'
 
 const EXPECTED_TABLE_NAMES = [
   'users',
@@ -23,6 +23,8 @@ const EXPECTED_TABLE_NAMES = [
   'library_status_event',
 ]
 
+// Not the bare substring 'review': review_summary legitimately has review_score and
+// review_score_desc. These target the body of a review and the person who wrote it.
 const BANNED_COLUMN_SUBSTRINGS = [
   'steamid',
   'persona',
@@ -30,6 +32,22 @@ const BANNED_COLUMN_SUBSTRINGS = [
   'profile_url',
   'recommendationid',
   'weighted_vote_score',
+  'author',
+  'review_text',
+  'review_body',
+  'body',
+  'comment',
+  'username',
+]
+
+const REVIEW_SUMMARY_COLUMNS = [
+  'appid',
+  'review_score',
+  'review_score_desc',
+  'total_positive',
+  'total_negative',
+  'total_reviews',
+  'fetched_at',
 ]
 
 function schemaTables(): PgTable[] {
@@ -69,7 +87,7 @@ describe('schema', () => {
     expect(tableNames).toEqual([...EXPECTED_TABLE_NAMES].sort())
   })
 
-  it('keeps no column anywhere that could hold a reviewer identity', () => {
+  it('keeps no column anywhere that could hold review text or a reviewer identity', () => {
     for (const table of schemaTables()) {
       const { name: tableName, columns } = getTableConfig(table)
       for (const column of columns) {
@@ -77,9 +95,16 @@ describe('schema', () => {
         const hit = BANNED_COLUMN_SUBSTRINGS.find((banned) => lower.includes(banned))
         expect(
           hit,
-          `${tableName}.${column.name} looks like it stores a reviewer identity (matched "${hit}")`,
+          `${tableName}.${column.name} looks like it stores review text or a reviewer identity (matched "${hit}")`,
         ).toBeUndefined()
       }
     }
+  })
+
+  it('keeps review_summary to exactly its seven aggregate columns', () => {
+    const columns = getTableConfig(reviewSummary)
+      .columns.map((c) => c.name)
+      .sort()
+    expect(columns).toEqual([...REVIEW_SUMMARY_COLUMNS].sort())
   })
 })

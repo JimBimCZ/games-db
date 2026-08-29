@@ -155,6 +155,8 @@ DATABASE_URL_UNPOOLED   # direct connection, migrations only
 STEAM_API_KEY           # required, not optional — IStoreService/GetAppList returns 403 without it
 STEAM_COUNTRY_CODE      # defaults to cz
 AUTH_SECRET
+AUTH_GITHUB_ID          # GitHub OAuth app, the only sign-in provider
+AUTH_GITHUB_SECRET
 AUTH_URL                # required in the container path
 ```
 
