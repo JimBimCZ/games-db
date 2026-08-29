@@ -65,7 +65,7 @@ pnpm db:migrate       # apply migrations
 pnpm db:studio        # inspect data
 pnpm sync:catalogue   # refresh the local Steam app index (see below)
 docker build -t games-app .
-docker run --env-file .env.local -p 3000:3000 games-app
+docker run --env-file .env.local -p 3001:3000 games-app
 ```
 
 Run the real command before reporting on it. Do not report the outcome of a command you did not run.
