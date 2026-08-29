@@ -104,7 +104,6 @@ Do **not** run `create-next-app` — the directory already holds `CLAUDE.md`, `L
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
@@ -193,17 +192,20 @@ const config = { plugins: { '@tailwindcss/postcss': {} } }
 export default config
 ```
 
-`eslint.config.mjs`:
+`eslint.config.mjs` — `eslint-config-next@16` ships flat config natively via its
+`./core-web-vitals` and `./typescript` export paths, so no `FlatCompat` shim is needed:
 
 ```javascript
-import { FlatCompat } from '@eslint/eslintrc'
+import nextCoreWebVitals from 'eslint-config-next/core-web-vitals'
+import nextTypescript from 'eslint-config-next/typescript'
 
-const compat = new FlatCompat({ baseDirectory: import.meta.dirname })
-
-export default [
-  ...compat.extends('next/core-web-vitals', 'next/typescript'),
+const eslintConfig = [
+  ...nextCoreWebVitals,
+  ...nextTypescript,
   { ignores: ['.next/**', 'node_modules/**', 'db/migrations/**'] },
 ]
+
+export default eslintConfig
 ```
 
 `vitest.config.ts` — both workarounds below are real and were hit on the sibling project:
