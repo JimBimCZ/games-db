@@ -1,3 +1,3 @@
 export default function DiscoverPage() {
-  return <main className="p-6">Discover</main>
+  return <div className="p-6">Discover</div>
 }

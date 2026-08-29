@@ -176,7 +176,6 @@ ALTER TABLE "game_media" ADD CONSTRAINT "game_media_appid_game_appid_fk" FOREIGN
 ALTER TABLE "library_entry" ADD CONSTRAINT "library_entry_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "library_status_event" ADD CONSTRAINT "library_status_event_entry_id_library_entry_id_fk" FOREIGN KEY ("entry_id") REFERENCES "public"."library_entry"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "price" ADD CONSTRAINT "price_appid_game_appid_fk" FOREIGN KEY ("appid") REFERENCES "public"."game"("appid") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "price_history" ADD CONSTRAINT "price_history_appid_game_appid_fk" FOREIGN KEY ("appid") REFERENCES "public"."game"("appid") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "review_summary" ADD CONSTRAINT "review_summary_appid_game_appid_fk" FOREIGN KEY ("appid") REFERENCES "public"."game"("appid") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "game_type_idx" ON "game" USING btree ("type");--> statement-breakpoint

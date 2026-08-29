@@ -30,7 +30,11 @@ function createDb(): Db {
     return drizzleNeon(neon(url), { schema }) as unknown as Db
   }
 
-  return drizzlePg(new Pool({ connectionString: url }), { schema })
+  const pool = new Pool({ connectionString: url })
+  // An unhandled 'error' on the Pool is an uncaught exception that kills the process: idle
+  // clients emit it when the backend drops them, out of band from any query's try/catch.
+  pool.on('error', (err) => console.error('postgres idle client error:', err.message))
+  return drizzlePg(pool, { schema })
 }
 
 let instance: Db | undefined
