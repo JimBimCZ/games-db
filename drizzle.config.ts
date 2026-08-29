@@ -1,4 +1,8 @@
+import { existsSync } from 'node:fs'
 import { defineConfig } from 'drizzle-kit'
+
+// drizzle-kit runs outside Next, which is what normally loads .env.local.
+if (existsSync('.env.local')) process.loadEnvFile('.env.local')
 
 export default defineConfig({
   dialect: 'postgresql',

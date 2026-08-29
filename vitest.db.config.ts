@@ -1,5 +1,9 @@
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { defineConfig } from 'vitest/config'
+
+// Vitest runs outside Next, which is what normally loads .env.local.
+if (existsSync('.env.local')) process.loadEnvFile('.env.local')
 
 export default defineConfig({
   test: {
