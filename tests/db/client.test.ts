@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { resolveDriver } from '@/db/client'
+import { describe, expect, it, vi } from 'vitest'
+import { getJobDb, resolveDriver } from '@/db/client'
 
 describe('resolveDriver', () => {
   it('uses the Neon serverless driver on Vercel', () => {
@@ -16,6 +16,14 @@ describe('resolveDriver', () => {
 
   it('rejects an unknown DB_DRIVER rather than silently guessing', () => {
     expect(() => resolveDriver({ DB_DRIVER: 'mysql' })).toThrow(/Unsupported DB_DRIVER/)
+  })
+})
+
+describe('getJobDb', () => {
+  it('refuses to hand a job the non-transactional driver', () => {
+    vi.stubEnv('DB_DRIVER', 'neon-http')
+    expect(() => getJobDb()).toThrow(/node-postgres/)
+    vi.unstubAllEnvs()
   })
 })
 
