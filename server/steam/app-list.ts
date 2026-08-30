@@ -1,6 +1,6 @@
 import 'server-only'
 import { z } from 'zod'
-import { steamFetchJson } from './client'
+import { steamFetchJson } from './client.ts'
 
 const entrySchema = z.object({
   appid: z.number().int(),
