@@ -1,7 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getDb } from '@/db/client'
-import { steamApp } from '@/db/schema'
 import { upsertAppBatch } from '@/server/catalogue/sync'
 
 const APPID = 2147480000
