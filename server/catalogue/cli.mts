@@ -20,7 +20,9 @@ try {
       `in ${((Date.now() - started) / 1000).toFixed(1)}s`,
   )
 } catch (err) {
-  console.error('catalogue sync failed:', err instanceof Error ? err.message : err)
+  // Logging the message alone discards `cause` (e.g. the original network fault
+  // behind a retried fetch); logging the error object preserves it.
+  console.error('catalogue sync failed:', err)
   process.exitCode = 1
 } finally {
   await closeDb()

@@ -52,6 +52,32 @@ describe('walkAppList', () => {
     expect(urls[0]).toContain('last_appid=0')
     expect(urls[1]).toContain('last_appid=508530')
     expect(urls[0]).toContain('include_games=true')
+    expect(urls[0]).toContain(`max_results=${50000}`)
+  })
+
+  it('throws rather than looping when the cursor fails to advance', async () => {
+    const stallingPage = {
+      response: { apps: [{ appid: 1, name: 'Stalled' }], have_more_results: true, last_appid: 5 },
+    }
+    let calls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls += 1
+        if (calls > 5) throw new Error('walkAppList did not throw before the stub call cap')
+        return new Response(JSON.stringify(stallingPage), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }),
+    )
+
+    const drain = async () => {
+      for await (const _ of walkAppList('KEY', { includeGames: true }, { delayMs: 0 })) void _
+    }
+
+    await expect(drain()).rejects.toThrow(/cursor did not advance/)
+    expect(calls).toBeLessThanOrEqual(5)
   })
 
   it('sends if_modified_since when asked', async () => {

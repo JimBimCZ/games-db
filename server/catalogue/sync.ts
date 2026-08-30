@@ -18,7 +18,7 @@ export function chunk<T>(items: T[], size: number): T[][] {
 export async function upsertAppBatch(
   db: Db,
   rows: SteamAppListEntry[],
-  appType: string,
+  appType: 'game' | 'dlc',
   seenAt: Date,
 ): Promise<void> {
   if (rows.length === 0) return
@@ -42,7 +42,7 @@ async function runPass(
   db: Db,
   key: string,
   flags: { includeGames?: boolean; includeDlc?: boolean; ifModifiedSince?: number },
-  appType: string,
+  appType: 'game' | 'dlc',
   seenAt: Date,
   chunkSize: number,
   delayMs: number,

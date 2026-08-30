@@ -24,9 +24,9 @@ RUN pnpm build
 #
 # This list is every runtime import server/ and db/ reach for that Next's standalone trace
 # doesn't follow (see the comment by the runner-stage COPY below). It is hand-maintained: if
-# a later change adds a new import to those trees, this build still succeeds and every test
-# still passes — the job just fails at container runtime with ERR_MODULE_NOT_FOUND. Nothing
-# in the test suite catches that; grow this list when it happens.
+# a later change adds a new import to those trees and this list isn't grown to match, the
+# runner stage's smoke-import RUN line below catches it as a failed docker build instead of
+# an ERR_MODULE_NOT_FOUND surprise at container runtime.
 RUN mkdir -p /app/runtime-modules/@neondatabase && \
   cp -rL /app/node_modules/drizzle-orm /app/runtime-modules/drizzle-orm && \
   cp -rL /app/node_modules/zod /app/runtime-modules/zod && \
@@ -55,6 +55,11 @@ COPY --from=builder --chown=node:node /app/server ./server
 # drizzle-orm, zod, server-only and @neondatabase/serverless are reachable only from
 # these job sources, not from any traced route, so Next's standalone trace drops them.
 COPY --from=builder --chown=node:node /app/runtime-modules ./node_modules
+
+# Smoke-imports the sync job against exactly the node_modules this image ships. No
+# DATABASE_URL or network needed — this is what catches a package missed from the
+# hand-maintained runtime-modules list above (see that comment).
+RUN node --conditions=react-server -e "await import('./server/catalogue/sync.ts')"
 
 USER node
 EXPOSE 3000

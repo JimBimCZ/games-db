@@ -11,13 +11,19 @@ export class SteamHttpError extends Error {
     super(`Steam returned HTTP ${status}: ${bodyPreview.slice(0, 120)}`)
     this.name = 'SteamHttpError'
     this.status = status
-    this.bodyPreview = bodyPreview
+    // A large error body (observed: 500 KB) must not be retained in full — logging the
+    // error object serializes this property, and an unbounded one would defeat the point.
+    this.bodyPreview = bodyPreview.slice(0, 500)
   }
 }
 
 type FetchOptions = { retries?: number; backoffMs?: number }
 
 const RETRYABLE = new Set([429, 500, 502, 503, 504])
+
+// An uncapped Retry-After would let a misbehaving or malicious response (e.g. 86400)
+// silently stall a job for a day.
+const MAX_RETRY_AFTER_MS = 60_000
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -29,9 +35,20 @@ export async function steamFetchJson(url: URL, opts: FetchOptions = {}): Promise
     throw new RangeError(`retries must be non-negative, got ${retries}`)
   }
 
-  let lastError: SteamHttpError | undefined
+  let lastError: Error | undefined
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const res = await fetch(url)
+    let res: Response
+    try {
+      // A thrown network fault (DNS failure, ECONNRESET) must be retried like a 5xx
+      // rather than escaping the loop and aborting a job with no resume point.
+      res = await fetch(url)
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      if (attempt === retries) break
+      await sleep(backoffMs * 2 ** attempt)
+      continue
+    }
+
     // The 403 body is HTML, so the status must be checked before any parse attempt.
     const body = await res.text()
 
@@ -47,7 +64,8 @@ export async function steamFetchJson(url: URL, opts: FetchOptions = {}): Promise
     if (!RETRYABLE.has(res.status) || attempt === retries) break
 
     const retryAfter = Number(res.headers.get('retry-after'))
-    await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : backoffMs * 2 ** attempt)
+    const retryAfterMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : undefined
+    await sleep(retryAfterMs !== undefined ? Math.min(retryAfterMs, MAX_RETRY_AFTER_MS) : backoffMs * 2 ** attempt)
   }
 
   throw lastError

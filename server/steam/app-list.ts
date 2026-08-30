@@ -47,6 +47,12 @@ export async function* walkAppList(
     url.searchParams.set('last_appid', String(cursor))
     url.searchParams.set('include_games', String(flags.includeGames ?? false))
     url.searchParams.set('include_dlc', String(flags.includeDlc ?? false))
+    // Steam's own default for `include_games=false` with no other flag set is not
+    // "nothing" — it returns low appids like {"appid":1,"name":"Action"}. Pin every
+    // include flag rather than rely on an undocumented endpoint's defaults.
+    url.searchParams.set('include_software', 'false')
+    url.searchParams.set('include_videos', 'false')
+    url.searchParams.set('include_hardware', 'false')
     if (flags.ifModifiedSince !== undefined) {
       url.searchParams.set('if_modified_since', String(flags.ifModifiedSince))
     }
@@ -56,6 +62,13 @@ export async function* walkAppList(
 
     // The terminal page omits both keys, so the cursor alone cannot end the loop.
     if (!page.haveMore || page.lastAppid === undefined) return
+
+    // The endpoint is undocumented; the spec's exclusive-and-monotonic cursor is
+    // observed behaviour, not a guarantee. A cursor that fails to advance would
+    // otherwise loop forever, re-upserting the same batch into production.
+    if (page.lastAppid <= cursor) {
+      throw new Error(`walkAppList: cursor did not advance past ${cursor} (got ${page.lastAppid})`)
+    }
 
     cursor = page.lastAppid
     if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs))

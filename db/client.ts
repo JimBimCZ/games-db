@@ -56,10 +56,11 @@ export async function closeDb(): Promise<void> {
   if (poolToClose) {
     try {
       await poolToClose.end()
-    } catch {
+    } catch (err) {
       // Ignore close errors. We've cleared pool and instance above, so a stale
       // client won't be returned by getDb(). Swallowing the error here prevents
       // close failures from masking the actual error that triggered closeDb.
+      console.error('postgres pool close error:', err)
     }
   }
 }
