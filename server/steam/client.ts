@@ -1,4 +1,5 @@
 import 'server-only'
+import { limiterForHost } from './limiter.ts'
 
 export class SteamHttpError extends Error {
   // Not parameter properties: Node's strip-only type stripping (used by the sync.ts CLI
@@ -17,13 +18,15 @@ export class SteamHttpError extends Error {
   }
 }
 
-type FetchOptions = { retries?: number; backoffMs?: number }
+type FetchOptions = { retries?: number; backoffMs?: number; timeoutMs?: number }
 
 const RETRYABLE = new Set([429, 500, 502, 503, 504])
 
 // An uncapped Retry-After would let a misbehaving or malicious response (e.g. 86400)
 // silently stall a job for a day.
 const MAX_RETRY_AFTER_MS = 60_000
+
+const DEFAULT_TIMEOUT_MS = 20_000
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -39,9 +42,11 @@ export async function steamFetchJson(url: URL, opts: FetchOptions = {}): Promise
   for (let attempt = 0; attempt <= retries; attempt++) {
     let res: Response
     try {
+      await limiterForHost(url.hostname).acquire()
       // A thrown network fault (DNS failure, ECONNRESET) must be retried like a 5xx
-      // rather than escaping the loop and aborting a job with no resume point.
-      res = await fetch(url)
+      // rather than escaping the loop and aborting a job with no resume point. A timeout
+      // abort surfaces here the same way, since AbortSignal makes fetch reject.
+      res = await fetch(url, { signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS) })
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
       if (attempt === retries) break

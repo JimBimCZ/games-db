@@ -1,9 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SteamHttpError, steamFetchJson } from '@/server/steam/client'
+import { resetLimitersForTest } from '@/server/steam/limiter'
 
 const url = new URL('https://api.steampowered.com/IStoreService/GetAppList/v1/')
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+  vi.restoreAllMocks()
+  resetLimitersForTest()
+})
 
 function respond(
   status: number,
@@ -68,11 +74,17 @@ describe('steamFetchJson', () => {
   })
 
   // Stubs setTimeout to fire immediately and records the requested delay, so the wait
-  // itself never actually elapses in the test.
+  // itself never actually elapses in the test. Date.now is advanced by the same amount
+  // on each fake sleep so the limiter's own setTimeout-based spacing (also stubbed here,
+  // since it shares the same global) sees time pass the way it would for a real delay,
+  // instead of computing a second bogus wait against a clock that never moved.
   function recordSleeps(): number[] {
     const delays: number[] = []
+    let clock = Date.now()
+    vi.spyOn(Date, 'now').mockImplementation(() => clock)
     vi.stubGlobal('setTimeout', ((fn: () => void, ms: number) => {
       delays.push(ms)
+      clock += ms
       fn()
       return 0 as unknown as ReturnType<typeof setTimeout>
     }) as typeof setTimeout)
@@ -103,5 +115,43 @@ describe('steamFetchJson', () => {
     expect(await steamFetchJson(url, { retries: 1, backoffMs: 1 })).toEqual({ ok: true })
 
     expect(delays).toEqual([60_000])
+  })
+
+  it('waits for the limiter before each storefront request', async () => {
+    const timestamps: number[] = []
+    vi.stubEnv('STEAM_STOREFRONT_RPS', '50')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        timestamps.push(Date.now())
+        return new Response('{"ok":true}', { status: 200 })
+      }),
+    )
+
+    const storefrontUrl = new URL('https://store.steampowered.com/api/appdetails?appids=620')
+    await steamFetchJson(storefrontUrl)
+    await steamFetchJson(storefrontUrl)
+
+    expect(timestamps).toHaveLength(2)
+    expect(timestamps[1]! - timestamps[0]!).toBeGreaterThanOrEqual(15)
+  })
+
+  it('aborts a request that exceeds the timeout', async () => {
+    vi.stubEnv('STEAM_STOREFRONT_RPS', '100')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: URL, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+        }),
+      ),
+    )
+
+    await expect(
+      steamFetchJson(new URL('https://store.steampowered.com/api/appdetails?appids=620'), {
+        retries: 0,
+        timeoutMs: 30,
+      }),
+    ).rejects.toThrow()
   })
 })

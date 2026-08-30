@@ -4,6 +4,7 @@ import { z } from 'zod'
 const schema = z.object({
   DATABASE_URL: z.string({ error: 'DATABASE_URL is not set' }).min(1, 'DATABASE_URL is not set'),
   STEAM_COUNTRY_CODE: z.string().default('cz'),
+  STEAM_LANGUAGE: z.string().default('english'),
 })
 
 export function parseServerEnv(env: Record<string, string | undefined>) {
@@ -11,6 +12,7 @@ export function parseServerEnv(env: Record<string, string | undefined>) {
   return {
     databaseUrl: parsed.DATABASE_URL,
     steamCountryCode: parsed.STEAM_COUNTRY_CODE,
+    steamLanguage: parsed.STEAM_LANGUAGE,
   }
 }
 

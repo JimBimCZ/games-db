@@ -18,4 +18,8 @@ describe('parseServerEnv', () => {
   it('fails loudly when DATABASE_URL is empty', () => {
     expect(() => parseServerEnv({ DATABASE_URL: '' })).toThrow(/DATABASE_URL is not set/)
   })
+
+  it('defaults the language to english', () => {
+    expect(parseServerEnv({ DATABASE_URL: 'postgres://x' }).steamLanguage).toBe('english')
+  })
 })
