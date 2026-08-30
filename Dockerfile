@@ -21,6 +21,12 @@ RUN pnpm build
 # that includes peer hashes; a plain COPY of the symlink alone leaves a dangling link in the
 # runner stage. Dereferencing here into a flat directory keeps the runner COPY independent of
 # that store layout.
+#
+# This list is every runtime import server/ and db/ reach for that Next's standalone trace
+# doesn't follow (see the comment by the runner-stage COPY below). It is hand-maintained: if
+# a later change adds a new import to those trees, this build still succeeds and every test
+# still passes — the job just fails at container runtime with ERR_MODULE_NOT_FOUND. Nothing
+# in the test suite catches that; grow this list when it happens.
 RUN mkdir -p /app/runtime-modules/@neondatabase && \
   cp -rL /app/node_modules/drizzle-orm /app/runtime-modules/drizzle-orm && \
   cp -rL /app/node_modules/zod /app/runtime-modules/zod && \

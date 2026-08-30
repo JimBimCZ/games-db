@@ -151,7 +151,7 @@ Never write a code path that calls Steam once per item in a list. If you find yo
 
 ## Docker
 
-- Multi-stage build: dependencies, build, runtime. The runtime stage copies only the standalone output and static assets.
+- Multi-stage build: dependencies, build, runtime. The runtime stage copies the standalone output and static assets, plus `db/`, `server/`, and the handful of runtime-only packages they import that Next's standalone trace does not follow, so the one-off jobs below can run from source.
 - The container runs as a non-root user.
 - No Vercel-specific APIs in application code. Anything that only works on Vercel breaks the container path — if you need such an API, raise it rather than adding it.
 - A healthcheck endpoint exists and does not touch Steam. It may check the database.
