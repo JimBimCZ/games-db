@@ -554,10 +554,11 @@ function storefrontRate(): number {
   return parsed
 }
 
-// Replace this with the rate measured in Task 1 (see the M3 observations doc) and delete
-// this comment. Until that measurement exists this is the widely repeated "200 per 5
-// minutes" figure, which this project has never verified.
-export const DEFAULT_STOREFRONT_RPS = 0.67
+// 65% of the highest rate observed without a 429 (1.86 req/s sustained over 40 requests;
+// 200 requests in 203.6s hit no limit at all). That measurement is a floor, not a ceiling —
+// the probe stopped rather than climbing until Steam refused. See
+// docs/superpowers/specs/2026-08-30-m3-observations.md §2.
+export const DEFAULT_STOREFRONT_RPS = 1.2
 ```
 
 - [ ] **Step 4: Run the test and watch it pass**
@@ -853,11 +854,11 @@ const mediaEntrySchema = z.object({
   highlight: z.boolean().optional(),
   path_thumbnail: z.string().optional(),
   path_full: z.string().optional(),
-  mp4: z.record(z.string(), z.string()).optional(),
-  webm: z.record(z.string(), z.string()).optional(),
-  hls_h264: z.record(z.string(), z.string()).optional(),
-  dash_h264: z.record(z.string(), z.string()).optional(),
-  dash_av1: z.record(z.string(), z.string()).optional(),
+  // Observed live: these are plain URL strings, not per-quality variant objects, and no mp4
+  // or webm key appears at all. See the M3 observations doc §1a.
+  hls_h264: z.string().optional(),
+  dash_h264: z.string().optional(),
+  dash_av1: z.string().optional(),
 })
 
 const appDetailsDataSchema = z.object({
@@ -1457,20 +1458,14 @@ export function mapMediaRows(data: AppDetails): Omit<typeof gameMedia.$inferInse
       name: m.name ?? null,
       thumbnailUrl: m.thumbnail ?? null,
       fullUrl: null,
-      hlsUrl: firstUrl(m.hls_h264),
-      dashH264Url: firstUrl(m.dash_h264),
-      dashAv1Url: firstUrl(m.dash_av1),
+      hlsUrl: m.hls_h264 ?? null,
+      dashH264Url: m.dash_h264 ?? null,
+      dashAv1Url: m.dash_av1 ?? null,
       highlight: m.highlight ?? false,
     })
   })
 
   return rows
-}
-
-const firstUrl = (variants: Record<string, string> | undefined): string | null => {
-  if (!variants) return null
-  const values = Object.values(variants)
-  return values.length > 0 ? values[0]! : null
 }
 
 export function mapPriceRow(
@@ -2326,9 +2321,10 @@ import { TTL_MS } from '../steam/ttl.ts'
 import { serverEnv } from '../env.ts'
 import { PRICES_LOCK_KEY, releaseAdvisoryLock, tryAdvisoryLock } from './queue.ts'
 
-// Measured in Task 1 — see the M3 observations doc. filters=price_overview is the only
-// appdetails form that accepts several appids; everything else is one appid per request.
-export const PRICE_BATCH_SIZE = 10
+// Half the largest batch verified working: 200 distinct appids returned 200 keys, and no
+// boundary was found. filters=price_overview is the only appdetails form that accepts several
+// appids; everything else is one appid per request. See the M3 observations doc §3.
+export const PRICE_BATCH_SIZE = 100
 
 export function priceOverviewUrl(appids: number[], cc: string, l: string): URL {
   if (appids.length === 0) throw new RangeError('priceOverviewUrl needs at least one appid')
@@ -2345,13 +2341,21 @@ export function priceOverviewUrl(appids: number[], cc: string, l: string): URL {
 
 export async function selectStalePriceAppids(
   db: JobDb,
-  opts: { limit: number; cc: string },
+  opts: { limit: number; cc: string; exclude?: ReadonlySet<number> },
 ): Promise<number[]> {
   const cutoff = new Date(Date.now() - TTL_MS.price)
+  // An app that is not free but that Steam prices nowhere (observed: appid 271590, type game,
+  // no price_overview) never gets a price row, so stamping fetched_at cannot move it out of
+  // this result. Excluding what the run has already requested is what guarantees progress.
+  const excluded =
+    opts.exclude && opts.exclude.size > 0
+      ? sql`and g.appid not in ${sql.raw(`(${[...opts.exclude].join(',')})`)}`
+      : sql``
   const { rows } = await db.execute<{ appid: number }>(sql`
     select g.appid from game g
     left join price p on p.appid = g.appid and p.cc = ${opts.cc}
     where g.is_free = false and (p.fetched_at is null or p.fetched_at < ${cutoff})
+      ${excluded}
     order by p.fetched_at asc nulls first, g.appid
     limit ${opts.limit}
   `)
@@ -2419,14 +2423,16 @@ export async function refreshPrices(
   }
 
   const startedAt = Date.now()
+  const seen = new Set<number>()
   try {
     for (;;) {
       if (opts.maxRequests !== undefined && counts.batches >= opts.maxRequests) break
       if (opts.maxDurationMs !== undefined && Date.now() - startedAt >= opts.maxDurationMs) break
 
-      const appids = await selectStalePriceAppids(db, { limit: PRICE_BATCH_SIZE, cc })
+      const appids = await selectStalePriceAppids(db, { limit: PRICE_BATCH_SIZE, cc, exclude: seen })
       if (appids.length === 0) break
 
+      for (const appid of appids) seen.add(appid)
       counts.batches += 1
       counts.requested += appids.length
 
@@ -2435,8 +2441,9 @@ export async function refreshPrices(
       counts.written += applied.written
       counts.changed += applied.changed
 
-      // A free or delisted app returns no price, so its price row never gets a fetched_at and
-      // it would be selected again forever. Stamping the row keeps the cursor moving.
+      // Moves an app that already had a price row out of the stale window. An app with no
+      // price row matches nothing here, which is why `seen` above is what actually guarantees
+      // the run terminates.
       await db.execute(sql`
         update price set fetched_at = now()
         where cc = ${cc} and appid in ${sql.raw(`(${appids.join(',')})`)}
@@ -2462,7 +2469,7 @@ Expected: PASS, three tests.
 import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getJobDb } from '@/db/client'
-import { applyPriceBatch } from '@/server/catalogue/prices'
+import { applyPriceBatch, selectStalePriceAppids } from '@/server/catalogue/prices'
 
 const APPID = 2147482000
 
@@ -2509,6 +2516,23 @@ describe('applyPriceBatch', () => {
   it('ignores an appid whose price came back null', async () => {
     const result = await applyPriceBatch(getJobDb(), new Map([[APPID, null]]), 'cz', new Date())
     expect(result).toEqual({ written: 0, changed: 0 })
+  })
+
+  it('excludes appids the run has already requested', async () => {
+    const db = getJobDb()
+    // An app with no price row at all is the case that would otherwise be selected forever:
+    // stamping fetched_at matches no row, so only the exclusion set moves the run forward.
+    await db.execute(sql`delete from price where appid = ${APPID}`)
+
+    const before = await selectStalePriceAppids(db, { limit: 500, cc: 'cz' })
+    expect(before).toContain(APPID)
+
+    const after = await selectStalePriceAppids(db, {
+      limit: 500,
+      cc: 'cz',
+      exclude: new Set([APPID]),
+    })
+    expect(after).not.toContain(APPID)
   })
 })
 ```
