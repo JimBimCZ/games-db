@@ -152,7 +152,10 @@ Never write a code path that calls Steam once per item in a list. If you find yo
 ## UI conventions
 
 - Server components by default. `'use client'` only where interactivity genuinely requires it — the theme toggle, library status control, search input, video player.
-- Card grids (not carousels) use Steam's landscape capsule art and lazily load it below the fold.
+- Card grids (not carousels) use Steam's landscape header/capsule art and lazily load it
+  below the fold. Cards use `header_image` (460×215) rather than `capsule_image`
+  (231×87), which is too small for a grid cell; both are read from the payload, never
+  constructed.
 - The library status control updates optimistically and rolls back on failure.
 - Every interactive element is reachable by keyboard and has an accessible name. Capsule art has alt text with the game title.
 - Loading states are skeletons matching the final layout, not spinners.
