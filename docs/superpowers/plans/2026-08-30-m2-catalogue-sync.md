@@ -676,7 +676,7 @@ describe('upsertAppBatch', () => {
   it('updates the name but never the hydration queue columns', async () => {
     const db = getDb()
     await db.execute(
-      sql`update steam_app set hydration_state = 'done', failure_count = 4,
+      sql`update steam_app set hydration_state = 'ok', failure_count = 4,
           next_attempt_at = '2030-01-01' where appid = ${APPID}`,
     )
 
@@ -692,7 +692,7 @@ describe('upsertAppBatch', () => {
            from steam_app where appid = ${APPID}`)
 
     expect(rows[0]!.name).toBe('Fixture Renamed')
-    expect(rows[0]!.hydration_state).toBe('done')
+    expect(rows[0]!.hydration_state).toBe('ok')
     expect(rows[0]!.failure_count).toBe(4)
     expect(new Date(rows[0]!.next_attempt_at).getUTCFullYear()).toBe(2030)
     expect(new Date(rows[0]!.last_seen_in_list_at).getUTCMonth()).toBe(1)
