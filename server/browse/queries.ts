@@ -174,24 +174,3 @@ export async function searchCards(q: string): Promise<GameCard[]> {
     .limit(SEARCH_LIMIT)
   return rows.map(toGameCard)
 }
-
-export async function gameDetail(appid: number) {
-  const cc = countryCode()
-  const db = await browseDb()
-  const [row] = await db
-    .select(cardColumns)
-    .from(game)
-    .leftJoin(price, and(eq(price.appid, game.appid), eq(price.cc, cc)))
-    .where(eq(game.appid, appid))
-    .limit(1)
-  if (!row) return null
-
-  const genres = await db
-    .select({ description: genre.description })
-    .from(gameGenre)
-    .innerJoin(genre, eq(genre.id, gameGenre.genreId))
-    .where(eq(gameGenre.appid, appid))
-    .orderBy(genre.description)
-
-  return { card: toGameCard(row), genres: genres.map((g) => g.description) }
-}

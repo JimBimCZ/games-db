@@ -1,56 +1,146 @@
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
-import { formatMinor } from '@/lib/format/price'
+import { MediaViewer } from '@/components/media-viewer'
+import { PriceCard } from '@/components/price-card'
+import { ReviewBar } from '@/components/review-bar'
 import { parseAppid } from '@/server/browse/params'
-import { gameDetail } from '@/server/browse/queries'
+import { getReviewSummary } from '@/server/catalogue/review-summary'
+import { gameDetailFull } from '@/server/detail/queries'
+
+type Platforms = { windows?: boolean; mac?: boolean; linux?: boolean }
+
+function platformNames(platforms: unknown): string[] {
+  if (typeof platforms !== 'object' || platforms === null) return []
+  const p = platforms as Platforms
+  return [
+    p.windows ? 'Windows' : null,
+    p.mac ? 'macOS' : null,
+    p.linux ? 'Linux' : null,
+  ].filter((name): name is string => name !== null)
+}
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[10px] font-semibold uppercase tracking-wide text-text-dim">{label}</dt>
+      <dd className="mt-0.5">{children}</dd>
+    </div>
+  )
+}
 
 export default async function GamePage({ params }: { params: Promise<{ appid: string }> }) {
   const { appid } = await params
   const parsedAppid = parseAppid(appid)
   if (parsedAppid === null) notFound()
 
-  const detail = await gameDetail(parsedAppid)
+  const detail = await gameDetailFull(parsedAppid)
   if (!detail) notFound()
 
-  const { card, genres } = detail
+  // Read-through cache: serves the stored summary inside its TTL and otherwise makes the one
+  // live Steam call CLAUDE.md permits, for a game the user explicitly opened. It swallows and
+  // logs its own failures, so a Steam outage costs the block, not the page.
+  const reviews = await getReviewSummary(parsedAppid)
+
+  const platforms = platformNames(detail.platforms)
+  const developers = detail.developers ?? []
+  const publishers = detail.publishers ?? []
 
   return (
-    <article className="p-6">
-      <h1 className="text-xl font-semibold tracking-tight">{card.name}</h1>
-      {card.headerImage ? (
-        <Image
-          src={card.headerImage}
-          alt={card.name}
-          width={460}
-          height={215}
-          priority
-          className="mt-3 rounded-md border border-line"
-        />
-      ) : null}
-      <dl className="mt-4 grid max-w-md grid-cols-[8rem_1fr] gap-y-1">
-        <dt className="text-text-dim">Release</dt>
-        <dd>{card.releaseDateText ?? 'Unknown'}</dd>
-        <dt className="text-text-dim">Genres</dt>
-        <dd>{genres.length > 0 ? genres.join(', ') : '—'}</dd>
-        <dt className="text-text-dim">Price</dt>
-        <dd>
-          {card.isFree
-            ? 'Free'
-            : card.price
-              ? card.price.discountPercent > 0
-                ? `${formatMinor(card.price.finalMinor, card.price.currency)} (was ${formatMinor(card.price.initialMinor, card.price.currency)}, −${card.price.discountPercent}%)`
-                : formatMinor(card.price.finalMinor, card.price.currency)
-              : 'Not listed'}
-        </dd>
-      </dl>
-      <a
-        className="mt-4 inline-block text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-        href={`https://store.steampowered.com/app/${card.appid}`}
-        rel="noreferrer"
-        target="_blank"
-      >
-        View on Steam
-      </a>
+    <article>
+      <header className="relative border-b border-line">
+        {detail.backgroundRaw ? (
+          <Image
+            src={detail.backgroundRaw}
+            alt=""
+            width={1438}
+            height={810}
+            loading="eager"
+            fetchPriority="high"
+            className="h-48 w-full object-cover"
+          />
+        ) : (
+          <div className="h-48 w-full bg-bg-panel" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-bg to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-6">
+          <h1 className="text-2xl font-semibold tracking-tight">{detail.name}</h1>
+          {detail.releaseDateText ? (
+            <p className="mt-0.5 text-text-dim">{detail.releaseDateText}</p>
+          ) : null}
+        </div>
+      </header>
+
+      <div className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
+          <MediaViewer media={detail.media} title={detail.name} />
+
+          {detail.aboutHtml ? (
+            <section className="mt-6">
+              <h2 className="text-[10px] font-semibold uppercase tracking-wide text-text-dim">
+                About this game
+              </h2>
+              {/* about_html was sanitised by the hydration job before it was cached
+                  (map-app-details.ts), which is what makes this safe. The requirements
+                  fields in the same row were deliberately not, and must be sanitised at
+                  render time when M5's second PR adds them. */}
+              <div
+                className="steam-html mt-2 max-w-2xl"
+                dangerouslySetInnerHTML={{ __html: detail.aboutHtml }}
+              />
+            </section>
+          ) : null}
+        </div>
+
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-6 lg:self-start">
+          <PriceCard
+            appid={detail.appid}
+            isFree={detail.isFree}
+            price={detail.price}
+            releaseDateText={detail.releaseDateText}
+            releaseComingSoon={detail.releaseComingSoon}
+          />
+
+          <ReviewBar summary={reviews} />
+
+          <dl className="flex flex-col gap-3">
+            {developers.length > 0 ? (
+              <Fact label="Developer">{developers.join(', ')}</Fact>
+            ) : null}
+            {publishers.length > 0 ? (
+              <Fact label="Publisher">{publishers.join(', ')}</Fact>
+            ) : null}
+            {platforms.length > 0 ? <Fact label="Platforms">{platforms.join(', ')}</Fact> : null}
+            {detail.genres.length > 0 ? <Fact label="Genres">{detail.genres.join(', ')}</Fact> : null}
+            {detail.metacriticScore !== null ? (
+              <Fact label="Metacritic">
+                {detail.metacriticUrl ? (
+                  <a
+                    className="text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                    href={detail.metacriticUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {detail.metacriticScore}
+                  </a>
+                ) : (
+                  detail.metacriticScore
+                )}
+              </Fact>
+            ) : null}
+            {detail.recommendationsTotal !== null ? (
+              <Fact label="Recommendations">
+                {detail.recommendationsTotal.toLocaleString('en')}
+              </Fact>
+            ) : null}
+            {detail.achievementsTotal !== null ? (
+              <Fact label="Achievements">{detail.achievementsTotal}</Fact>
+            ) : null}
+            {detail.categories.length > 0 ? (
+              <Fact label="Features">{detail.categories.join(', ')}</Fact>
+            ) : null}
+          </dl>
+        </aside>
+      </div>
     </article>
   )
 }

@@ -100,3 +100,38 @@ body {
     cursor: pointer;
   }
 }
+
+/* Steam's about_the_game HTML arrives with its own markup — headings, lists, and inline
+   images sized for the store page — and Tailwind's preflight strips the browser defaults
+   that made it readable. These rules are scoped to that sanitised payload only. */
+.steam-html {
+  line-height: 1.5;
+}
+
+.steam-html img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 5px;
+  margin: 0.75rem 0;
+}
+
+.steam-html h1,
+.steam-html h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.35rem;
+}
+
+.steam-html p {
+  margin: 0.6rem 0;
+}
+
+.steam-html ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin: 0.6rem 0;
+}
+
+.steam-html a {
+  color: var(--accent);
+}
