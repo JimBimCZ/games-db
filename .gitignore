@@ -19,3 +19,8 @@ coverage/
 playwright-report/
 test-results/
 .env*
+
+# Locally installed agent skill caches
+.agents/
+.claude/
+skills-lock.json
