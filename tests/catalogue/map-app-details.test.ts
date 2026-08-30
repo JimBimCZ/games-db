@@ -56,19 +56,27 @@ describe('mapGameRow', () => {
 
 describe('mapMediaRows', () => {
   it('reads media URLs from the payload and never constructs them', () => {
-    const rows = mapMediaRows(details('appdetails-1174180.json', 1174180))
+    const data = details('appdetails-1174180.json', 1174180)
+    const rows = mapMediaRows(data)
     expect(rows.length).toBeGreaterThan(0)
     for (const row of rows) {
       expect(['screenshot', 'movie']).toContain(row.kind)
       expect(row.appid).toBe(1174180)
     }
+
+    const fixtureScreenshots = data.screenshots ?? []
+    expect(fixtureScreenshots.length).toBeGreaterThan(0)
+    const screenshots = rows.filter((r) => r.kind === 'screenshot')
+    expect(screenshots[0]!.fullUrl).toBe(fixtureScreenshots[0]!.path_full)
+    expect(screenshots[0]!.thumbnailUrl).toBe(fixtureScreenshots[0]!.path_thumbnail)
+    expect(screenshots.map((r) => r.position)).toEqual(screenshots.map((_, i) => i))
+
+    const fixtureMovies = data.movies ?? []
+    expect(fixtureMovies.length).toBeGreaterThan(0)
     const movies = rows.filter((r) => r.kind === 'movie')
-    if (movies.length > 0) {
-      expect(movies[0]!.hlsUrl ?? movies[0]!.dashH264Url).toBeTruthy()
-    }
-    expect(rows.filter((r) => r.kind === 'screenshot').map((r) => r.position)).toEqual(
-      rows.filter((r) => r.kind === 'screenshot').map((_, i) => i),
-    )
+    expect(movies[0]!.hlsUrl).toBe(fixtureMovies[0]!.hls_h264 ?? null)
+    expect(movies[0]!.dashH264Url).toBe(fixtureMovies[0]!.dash_h264 ?? null)
+    expect(movies.map((r) => r.position)).toEqual(movies.map((_, i) => i))
   })
 
   it('returns an empty list when there is no media', () => {
@@ -99,7 +107,27 @@ describe('parseReleaseDate', () => {
     expect(parseReleaseDate(text)?.getUTCFullYear()).toBe(year)
   })
 
-  it.each(['Q4 2026', 'Coming soon', '', 'To be announced'])('returns null for %s', (text) => {
+  it.each([
+    'Q4 2026',
+    'Coming soon',
+    '',
+    'To be announced',
+    '2026',
+    'Winter 2026',
+    'Early 2026',
+    'Holiday 2026',
+    'TBA 2026',
+    'March 2026',
+  ])('returns null for %s', (text) => {
     expect(parseReleaseDate(text)).toBeNull()
+  })
+
+  // V8 parses non-ISO date strings in the local timezone. Under a timezone ahead of UTC (e.g.
+  // Europe/Prague), "1 Jan, 2008" parsed via Date.parse rolls back to 2007-12-31T23:00:00Z,
+  // corrupting the stored year. Date.UTC sidesteps this entirely, so the assertion pins the
+  // exact instant rather than just a UTC year that a local-time parse could still land on for
+  // dates further from midnight.
+  it('anchors to UTC regardless of local timezone', () => {
+    expect(parseReleaseDate('1 Jan, 2008')?.toISOString()).toBe('2008-01-01T00:00:00.000Z')
   })
 })
