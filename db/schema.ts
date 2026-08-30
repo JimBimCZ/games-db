@@ -1,4 +1,4 @@
-import { desc } from 'drizzle-orm'
+import { desc, sql } from 'drizzle-orm'
 import {
   boolean,
   index,
@@ -160,6 +160,7 @@ export const game = pgTable(
     index('game_type_idx').on(t.type),
     index('game_release_date_idx').on(t.releaseDate),
     index('game_name_idx').on(t.name),
+    index('game_name_trgm_idx').using('gin', sql`${t.name} gin_trgm_ops`),
   ],
 )
 
