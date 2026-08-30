@@ -148,9 +148,17 @@ The `where` clause on the conflict branch makes re-selecting the current status 
 without it the history fills with duplicate rows every time the control is touched. A
 no-op returns `{ ok: true }` and writes nothing.
 
-The exact CTE, and whether Drizzle's `db.execute` carries it unchanged to both drivers, is
-to be verified during implementation and its output pasted. It is written here as intent,
-not as an observed result.
+This statement was **run live against Neon on 2026-08-30** inside a transaction that was
+then rolled back. All six branches behaved: insert; same-status re-select returning no rows
+and writing no event; a status change preserving `price_seen`; re-entering wishlist
+overwriting it (4199 → 3199); an unknown appid rejected by the `where exists`; and the
+delete cascading its events. Whether Drizzle's `db.execute` carries it unchanged to both
+drivers is still unverified — the probe used `pg` directly.
+
+Two things that statement must supply, confirmed against `information_schema`: both `id`
+columns are `NOT NULL` with **no database default**. Drizzle's `$defaultFn(() =>
+crypto.randomUUID())` runs client-side only, so raw SQL that omits either id fails on a
+not-null violation.
 
 `removeFromLibrary` needs none of this: it is a single
 `delete from library_entry where user_id = $1 and appid = $2`, and the events go with it
@@ -171,12 +179,16 @@ shows no delta.
 
 ### 5.3 Revalidation
 
-`revalidatePath('/library')` on a successful write: that page's row set and ordering
-change. `cacheComponents` is off in `next.config.ts`, so `updateTag` — which the Next 16
-revalidation guide scopes to Cache Components — is not the applicable API here. The page
-the user is looking at is covered by the optimistic value. Whether the client router cache
-also needs clearing for a back-navigation to show the new status is to be checked during
-implementation, not assumed.
+A successful write calls **both** `refresh()` and `revalidatePath('/library')`, and the
+first of those is not optional. `useOptimistic` reverts to the server-rendered prop when
+the transition ends, so refreshing only `/library` would leave a successful change on the
+*detail* page visually snapping back to the old status. `refresh()` refreshes whichever
+route invoked the action; `revalidatePath('/library')` covers the other page, whose row set
+and ordering also change. Both are exported from `next/cache` in 16.3.3 — type-checked, not
+assumed.
+
+`cacheComponents` is off in `next.config.ts`, so `updateTag` — which the Next 16
+revalidation guide scopes to Cache Components — is not the applicable API here.
 
 ---
 
