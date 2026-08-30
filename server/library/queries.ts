@@ -1,5 +1,5 @@
 import 'server-only'
-import { and, asc, desc, eq, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm'
 import { connection } from 'next/server'
 import { cache } from 'react'
 import { getDb } from '../../db/client.ts'
@@ -91,10 +91,15 @@ export type LibraryRow = {
 function orderFor(sort: SortKey, dir: SortDir): SQL {
   const direction = dir === 'asc' ? asc : desc
   switch (sort) {
+    // name and price come off left-joined, nullable columns (game, price), so Postgres's
+    // default NULLS FIRST on DESC would otherwise float rows with no game or no price to
+    // the top; nulls last in both directions keeps missing values sinking, not floating.
     case 'name':
-      return direction(game.name)
+      return dir === 'asc' ? sql`${game.name} asc nulls last` : sql`${game.name} desc nulls last`
     case 'price':
-      return direction(price.finalMinor)
+      return dir === 'asc'
+        ? sql`${price.finalMinor} asc nulls last`
+        : sql`${price.finalMinor} desc nulls last`
     case 'status':
       return direction(libraryEntry.status)
     case 'added':
