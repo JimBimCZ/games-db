@@ -64,6 +64,9 @@ pnpm db:generate      # generate migration from schema changes
 pnpm db:migrate       # apply migrations
 pnpm db:studio        # inspect data
 pnpm sync:catalogue   # refresh the local Steam app index (see below)
+pnpm hydrate          # fill in appdetails for pending apps; --max-requests, --max-duration,
+                      # --appid, --type=game|dlc
+pnpm refresh:prices   # batched price refresh; appends price_history only on change
 docker build -t games-app .
 
 # vercel env pull writes double-quoted values and docker --env-file does not strip
@@ -96,11 +99,11 @@ Two different hosts, with different rules. Confirm current behaviour before rely
 
 ### The constraint that shapes the architecture
 
-Steam has no endpoint equivalent to TMDB's `/trending` or `/discover`. There is no "give me action games released in 2026, sorted by rating, page 3". Detail lookups are per-appid, and the storefront API has been rate limited to roughly 200 requests per 5 minutes since 2015, with multiple appids no longer working for full detail in a single request.
+Steam has no endpoint equivalent to TMDB's `/trending` or `/discover`. There is no "give me action games released in 2026, sorted by rating, page 3". Detail lookups are per-appid, and the storefront API is rate limited, with multiple appids no longer working for full detail in a single request. Where the limit actually sits is unverified: a bounded ramp sustained 1.86 req/s without a 429, which establishes a floor and not a ceiling — see the M3 observations doc §2. The widely repeated "200 requests per 5 minutes" figure is not something this project measured; do not restate it as fact.
 
 This means the app cannot be a thin proxy. It must maintain its own index:
 
-1. `pnpm sync:catalogue` pulls the full app list from `IStoreService/GetAppList` (`ISteamApps/GetAppList` is gone — v1 and v2 both 404) and upserts appids and names into a `steam_app` table, covering games and DLC only — software, videos and hardware are excluded (183,101 games and 61,890 DLC, zero overlap between the two passes). The endpoint lives on `api.steampowered.com`, a different host from the storefront, so the storefront's ~200-per-5-minutes limit does not apply to it: a full sync is 6 requests at `max_results=50000`, about 18 seconds. The client still backs off on 429 regardless, because an unobserved limit is not an absent one. A page is `response.apps[]` of `{appid, name, last_modified, price_change_number}` plus `have_more_results`; the cursor, `last_appid`, is exclusive and absent entirely on the terminal page, so the walk must stop on `have_more_results`, never on the cursor. Without `STEAM_API_KEY` the endpoint returns HTTP 403 with an HTML body, not JSON.
+1. `pnpm sync:catalogue` pulls the full app list from `IStoreService/GetAppList` (`ISteamApps/GetAppList` is gone — v1 and v2 both 404) and upserts appids and names into a `steam_app` table, covering games and DLC only — software, videos and hardware are excluded (183,101 games and 61,890 DLC, zero overlap between the two passes). The endpoint lives on `api.steampowered.com`, a different host from the storefront, so the storefront's limit does not apply to it: a full sync is 6 requests at `max_results=50000`, about 18 seconds. The client still backs off on 429 regardless, because an unobserved limit is not an absent one. A page is `response.apps[]` of `{appid, name, last_modified, price_change_number}` plus `have_more_results`; the cursor, `last_appid`, is exclusive and absent entirely on the terminal page, so the walk must stop on `have_more_results`, never on the cursor. Without `STEAM_API_KEY` the endpoint returns HTTP 403 with an HTML body, not JSON.
 2. A background hydration job walks that table and fills in detail from `appdetails`, one appid at a time, respecting a conservative self-imposed rate limit with backoff on 429.
 3. All browse, filter, and search queries in the app hit our own tables. They never fan out to Steam.
 4. `appdetails` is called live only for a game the user has explicitly opened and that has no fresh cache row.
@@ -161,9 +164,15 @@ Never write a code path that calls Steam once per item in a list. If you find yo
 
 ```
 DATABASE_URL            # Neon pooled connection string
-DATABASE_URL_UNPOOLED   # direct connection, migrations only
+DATABASE_URL_UNPOOLED   # direct connection: migrations and the one-off jobs. Not a
+                        # precaution — the pooled endpoint grants the same advisory lock to
+                        # two concurrent clients, so a job holding it there excludes nobody
+                        # (M3 observations §4).
 STEAM_API_KEY           # required, not optional — IStoreService/GetAppList returns 403 without it
 STEAM_COUNTRY_CODE      # defaults to cz
+STEAM_LANGUAGE          # defaults to english
+STEAM_STOREFRONT_RPS    # storefront requests per second, defaults to 1.2 — about 65% of the
+                        # highest rate observed without limiting (M3 observations §2)
 AUTH_SECRET
 AUTH_GITHUB_ID          # GitHub OAuth app, the only sign-in provider
 AUTH_GITHUB_SECRET
