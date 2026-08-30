@@ -4,6 +4,7 @@ import type { JobDb } from '../../db/client.ts'
 
 export const HYDRATE_LOCK_KEY = 4801001
 export const PRICES_LOCK_KEY = 4801002
+export const LISTS_LOCK_KEY = 4801003
 
 const FIFTEEN_MIN = 15 * 60_000
 const MAX_BACKOFF_MS = 24 * 60 * 60_000
@@ -38,10 +39,14 @@ export async function selectDueApps(
   const typeFilter = opts.type ? sql`and app_type = ${opts.type}` : sql``
   const { rows } = await db.execute<{ appid: number }>(sql`
     select appid from steam_app
+    left join lateral (
+      select min(rank) as rank from steam_list where steam_list.appid = steam_app.appid
+    ) listed on true
     where hydration_state in ('pending', 'failed')
       and (next_attempt_at is null or next_attempt_at <= now())
       ${typeFilter}
-    order by (app_type = 'game') desc, steam_last_modified desc nulls last, appid
+    order by listed.rank nulls last,
+             (app_type = 'game') desc, steam_last_modified desc nulls last, appid
     limit ${opts.limit}
   `)
   return rows.map((r) => r.appid)

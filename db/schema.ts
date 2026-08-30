@@ -30,6 +30,13 @@ export const libraryStatus = pgEnum('library_status', [
 
 export const mediaKind = pgEnum('media_kind', ['screenshot', 'movie'])
 
+export const steamListKind = pgEnum('steam_list_kind', [
+  'top_sellers',
+  'specials',
+  'coming_soon',
+  'new_releases',
+])
+
 export const users = pgTable('users', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text('name'),
@@ -96,6 +103,22 @@ export const steamApp = pgTable(
       t.appType,
       desc(t.steamLastModified),
     ),
+  ],
+)
+
+export const steamList = pgTable(
+  'steam_list',
+  {
+    kind: steamListKind('kind').notNull(),
+    appid: integer('appid')
+      .notNull()
+      .references(() => steamApp.appid, { onDelete: 'cascade' }),
+    rank: integer('rank').notNull(),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.kind, t.appid] }),
+    index('steam_list_rank_idx').on(t.kind, t.rank),
   ],
 )
 

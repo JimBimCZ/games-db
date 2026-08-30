@@ -17,6 +17,7 @@
     "db:studio": "drizzle-kit studio",
     "sync:catalogue": "node --conditions=react-server server/catalogue/cli.mts",
     "hydrate": "node --conditions=react-server server/catalogue/hydrate-cli.mts",
+    "sync:lists": "node --conditions=react-server server/catalogue/lists-cli.mts",
     "refresh:prices": "node --conditions=react-server server/catalogue/prices-cli.mts"
   },
   "dependencies": {
