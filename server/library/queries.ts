@@ -82,6 +82,7 @@ export type LibraryRow = {
   addedAt: Date
   priceSeenMinor: number | null
   priceSeenCurrency: string | null
+  isFree: boolean | null
   currency: string | null
   initialMinor: number | null
   finalMinor: number | null
@@ -130,6 +131,7 @@ export async function libraryRows(
       addedAt: libraryEntry.addedAt,
       priceSeenMinor: libraryEntry.priceSeenMinor,
       priceSeenCurrency: libraryEntry.priceSeenCurrency,
+      isFree: game.isFree,
       currency: price.currency,
       initialMinor: price.initialMinor,
       finalMinor: price.finalMinor,
@@ -143,6 +145,6 @@ export async function libraryRows(
         ? and(eq(libraryEntry.userId, userId), eq(libraryEntry.status, status))
         : eq(libraryEntry.userId, userId),
     )
-    .orderBy(orderFor(sort, dir))
+    .orderBy(orderFor(sort, dir), sql`${game.name} asc nulls last`)
     .limit(LIBRARY_ROW_LIMIT)
 }

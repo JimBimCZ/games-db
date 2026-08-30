@@ -49,7 +49,9 @@ export function StatusControl({
         onChange={(event) => handleChange(event.target.value)}
         value={optimisticStatus ?? NONE}
       >
-        <option value={NONE}>{variant === 'compact' ? '+ Add' : 'Add to Library'}</option>
+        {optimisticStatus ? null : (
+          <option value={NONE}>{variant === 'compact' ? '+ Add' : 'Add to Library'}</option>
+        )}
         {LIBRARY_STATUSES.map((value) => (
           <option key={value} value={value}>
             {STATUS_LABELS[value]}

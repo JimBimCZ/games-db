@@ -55,8 +55,12 @@ function SortHeader({
 }
 
 function PriceCell({ row }: { row: LibraryRow }) {
+  if (row.isFree) {
+    return <span className="text-text-dim">Free</span>
+  }
+
   if (row.finalMinor === null || row.currency === null) {
-    return <span className="text-text-dim">—</span>
+    return <span className="text-text-dim">Price unavailable</span>
   }
 
   const delta =
