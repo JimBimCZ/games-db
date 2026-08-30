@@ -18,6 +18,7 @@ const sections = [
     label: 'Store',
     items: [
       { href: '/', name: 'Discover' },
+      { href: '/top-sellers', name: 'Top Sellers' },
       { href: '/specials', name: 'Specials' },
       { href: '/coming-soon', name: 'Coming Soon' },
       { href: '/new-releases', name: 'New Releases' },
