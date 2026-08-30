@@ -1,5 +1,6 @@
 import 'server-only'
 import { and, eq, sql } from 'drizzle-orm'
+import { connection } from 'next/server'
 import { getDb } from '../../db/client.ts'
 import { game, gameGenre, genre, price, steamList, steamListKind } from '../../db/schema.ts'
 import { serverEnv } from '../env.ts'
@@ -83,6 +84,15 @@ export function toGameCard(row: CardRow): GameCard {
   }
 }
 
+// Browse renders from the database on every request, so connection() holds these queries
+// back until one arrives. Without it Next runs them during the build's prerender pass, where
+// there is no DATABASE_URL — and because the sidebar queries genres, that pass covers every
+// route, failing both CI and the Docker build stage.
+async function browseDb() {
+  await connection()
+  return getDb()
+}
+
 function countryCode() {
   return serverEnv().steamCountryCode
 }
@@ -91,7 +101,8 @@ function countryCode() {
 // 97 beats a page with three broken holes.
 export async function listCards(kind: ListKind, limit: number): Promise<GameCard[]> {
   const cc = countryCode()
-  const rows = await getDb()
+  const db = await browseDb()
+  const rows = await db
     .select(cardColumns)
     .from(steamList)
     .innerJoin(game, eq(game.appid, steamList.appid))
@@ -108,7 +119,8 @@ export async function genreCards(
   page: number,
 ): Promise<{ cards: GameCard[]; hasNext: boolean }> {
   const cc = countryCode()
-  const rows = await getDb()
+  const db = await browseDb()
+  const rows = await db
     .select(cardColumns)
     .from(game)
     .innerJoin(gameGenre, eq(gameGenre.appid, game.appid))
@@ -125,7 +137,8 @@ export async function genreCards(
 }
 
 export async function genreById(id: string) {
-  const [row] = await getDb()
+  const db = await browseDb()
+  const [row] = await db
     .select({ id: genre.id, description: genre.description })
     .from(genre)
     .where(eq(genre.id, id))
@@ -134,7 +147,8 @@ export async function genreById(id: string) {
 }
 
 export async function sidebarGenres() {
-  return getDb()
+  const db = await browseDb()
+  return db
     .select({ id: genre.id, description: genre.description })
     .from(genre)
     .innerJoin(gameGenre, eq(gameGenre.genreId, genre.id))
@@ -150,7 +164,8 @@ export async function searchCards(q: string): Promise<GameCard[]> {
   // % and _ are ilike wildcards; escape them in the match pattern so a literal search term
   // like "do_a" doesn't match "Dota 2". similarity() still scores against the raw term.
   const pattern = `%${q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`
-  const rows = await getDb()
+  const db = await browseDb()
+  const rows = await db
     .select(cardColumns)
     .from(game)
     .leftJoin(price, and(eq(price.appid, game.appid), eq(price.cc, cc)))
@@ -162,7 +177,7 @@ export async function searchCards(q: string): Promise<GameCard[]> {
 
 export async function gameDetail(appid: number) {
   const cc = countryCode()
-  const db = getDb()
+  const db = await browseDb()
   const [row] = await db
     .select(cardColumns)
     .from(game)
