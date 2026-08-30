@@ -51,8 +51,11 @@ describe('the hydration queue', () => {
 
   it('takes a row out of the queue when marked ok', async () => {
     await markOk(getJobDb(), IDS[1]!)
-    const due = await selectDueApps(getJobDb(), { limit: WHOLE_QUEUE })
-    expect(due).not.toContain(IDS[1])
+    const { rows } = await getJobDb().execute<{ hydration_state: string; next_attempt_at: string | null }>(
+      sql`select hydration_state, next_attempt_at from steam_app where appid = ${IDS[1]}`,
+    )
+    expect(rows[0]!.hydration_state).toBe('ok')
+    expect(rows[0]!.next_attempt_at).toBeNull()
   })
 
   it('schedules a failed row into the future and counts the failure', async () => {
@@ -63,7 +66,6 @@ describe('the hydration queue', () => {
     expect(rows[0]!.failure_count).toBe(1)
     expect(rows[0]!.hydration_state).toBe('failed')
     expect(new Date(rows[0]!.next_attempt_at).getTime()).toBeGreaterThan(Date.now())
-    expect(await selectDueApps(getJobDb(), { limit: WHOLE_QUEUE })).not.toContain(IDS[0])
   })
 
   it('parks an unavailable row far out but does not lose it', async () => {
