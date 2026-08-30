@@ -3,8 +3,9 @@
 Date: 2026-08-30
 Machine: local (Czech IP, no proxy)
 
-Everything here was observed live in one session. Each item names the command, its output,
-and the value pinned as a result. Anything not observed says so and carries no number.
+Everything here was observed live. Each item names the command, its output, and the value
+pinned as a result. Anything not observed says so and carries no number. §1 to §6 come from
+one session; §2a was added from a later session the same day and says so.
 
 These resolve §8 of `2026-08-30-m3-hydration-design.md`.
 
@@ -104,6 +105,57 @@ further 14.
 
 **Still unverified:** where the storefront actually starts refusing. Nothing in the code states
 a ceiling.
+
+**Superseded in part:** the wall-clock projections above assume the job achieves 1.2 req/s. It
+does not — see §2a, which measures the end-to-end rate at 0.52–0.58 req/s.
+
+---
+
+## 2a. End-to-end hydration throughput — slower than the limiter interval implies
+
+Observed in a later session the same day, during the post-M6 backfill. This confirms the
+per-app cost already recorded in `2026-08-30-m3.5-ranked-lists-design.md` §9 (500 apps at
+2.05s each) from a different part of the queue: all 365 `steam_list` appids were already
+hydrated, so every app measured here came from the non-listed backlog.
+
+```
+$ pnpm hydrate --max-duration=300
+hydrate: attempted=158 ok=158 unavailable=0 failed=0
+hydrated 158 ok, 0 unavailable, 0 failed of 158 attempted in 301.4s
+```
+
+Per-app cost derived from `game.fetched_at`, which times the writes themselves rather than the
+process, segmenting the two runs at any inter-app gap over 10s:
+
+```
+probe run   158 apps, 293.5s span = 0.535 apps/s = 1,926 apps/h  (1.87 s/app)
+main run     55 apps,  93.4s span = 0.578 apps/s = 2,081 apps/h  (1.73 s/app)
+inter-app gap, both runs: p50=1.73s  p90=2.11s  p99=2.44s
+```
+
+`fetchAppDetails` issues exactly one storefront request per app and no retry fired (0 failed),
+so apps/s is req/s here. **The job sends 0.52–0.58 req/s** — under half the 1.2 rps pinned in
+§2, and under a third of the 1.86 req/s §2 observed without limiting. Raising
+`STEAM_STOREFRONT_RPS` alone would not close that gap: the limiter interval at 1.2 rps is
+0.833s, leaving roughly 0.9–1.2s per app spent outside it. m3.5 §9 traces that structurally
+through the code — serial fetch, then a multi-statement transaction to Neon, then `markOk`,
+with `limiter.acquire()` reserving its slot from `now` so database time is added on top of the
+interval rather than absorbed by it.
+
+**Not measured:** the split between fetch latency and database round trips, and whether
+concurrent in-flight apps would help. Nothing here establishes a safe concurrency level, and
+no concurrency change has been made.
+
+**Consequence for planning:** at 1,900–2,100 apps/h, a full pass over the 182,580 pending games
+is roughly 90–95 hours and the 61,893 DLC a further 30. The 42-hour and 14-hour figures in §2
+are computed from the limiter interval alone and do not hold once per-app database cost is
+counted — the same correction m3.5 §9 reached from its own sample.
+
+**Also observed:** 245 consecutive non-listed apps hydrated with 0 `unavailable` and 0 `failed`
+(`steam_app` holds no row in either state). m3.5 §9 recorded that no *listed* appid returned
+`success: false`; that now extends to this stretch of the backlog. It says nothing about the
+catalogue as a whole: the queue orders by `steam_last_modified desc`, so this sample sits at
+the recently-updated end, where delisted apps are least likely.
 
 ---
 
