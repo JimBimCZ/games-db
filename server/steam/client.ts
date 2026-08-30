@@ -40,22 +40,29 @@ export async function steamFetchJson(url: URL, opts: FetchOptions = {}): Promise
 
   let lastError: Error | undefined
   for (let attempt = 0; attempt <= retries; attempt++) {
+    // Outside the try: a malformed STEAM_STOREFRONT_RPS is a config error, not a network
+    // fault, and must fail immediately rather than burn three retries' worth of backoff.
+    await limiterForHost(url.hostname).acquire()
+
     let res: Response
+    let body: string
     try {
-      await limiterForHost(url.hostname).acquire()
       // A thrown network fault (DNS failure, ECONNRESET) must be retried like a 5xx
       // rather than escaping the loop and aborting a job with no resume point. A timeout
-      // abort surfaces here the same way, since AbortSignal makes fetch reject.
+      // abort surfaces here the same way, since AbortSignal makes fetch reject — but only
+      // while headers are in flight. fetch() resolves once headers arrive and the signal
+      // stays live while the body streams, so the body read has to stay inside this same
+      // try or a timeout firing mid-body throws past the loop as a bare, unretried
+      // DOMException.
       res = await fetch(url, { signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS) })
+      // The 403 body is HTML, so the status must be checked before any parse attempt.
+      body = await res.text()
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
       if (attempt === retries) break
       await sleep(backoffMs * 2 ** attempt)
       continue
     }
-
-    // The 403 body is HTML, so the status must be checked before any parse attempt.
-    const body = await res.text()
 
     if (res.ok) {
       try {

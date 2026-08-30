@@ -154,4 +154,23 @@ describe('steamFetchJson', () => {
       }),
     ).rejects.toThrow()
   })
+
+  it('retries when the timeout fires during the body read rather than escaping the loop', async () => {
+    // fetch() resolves as soon as headers arrive; the signal stays live while the body
+    // streams. This mocks that headers-ok-but-body-aborts case directly, since a real
+    // fetch's body stream can't be made to throw mid-read from a test without a live server.
+    const spy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        text: () => Promise.reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError')),
+      } as unknown as Response)
+      .mockResolvedValueOnce(respond(200, '{"ok":true}'))
+    vi.stubGlobal('fetch', spy)
+
+    expect(await steamFetchJson(url, { retries: 1, backoffMs: 1 })).toEqual({ ok: true })
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
 })

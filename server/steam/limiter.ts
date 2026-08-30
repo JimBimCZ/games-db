@@ -27,6 +27,10 @@ export function createLimiter(ratePerSecond: number): Limiter {
 // latter is the constrained one. A single global limiter would slow the sync to
 // storefront speed for no reason.
 const STOREFRONT_HOST = 'store.steampowered.com'
+// TODO: unmeasured. The M2 sync only establishes that 6 requests over ~18s (0.33 req/s)
+// is safe for IStoreService/GetAppList; run a ramp against api.steampowered.com like the
+// one in docs/superpowers/specs/2026-08-30-m3-observations.md §2 before trusting this
+// number, and update this comment with the measurement.
 const WEB_API_RATE = 5
 
 const limiters = new Map<string, Limiter>()
