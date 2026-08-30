@@ -4,19 +4,7 @@ if (existsSync('.env.local')) process.loadEnvFile('.env.local')
 
 const { closeDb } = await import('../../db/client.ts')
 const { syncCatalogue } = await import('./sync.ts')
-
-function parseSince(argv: string[]): number | undefined {
-  const arg = argv.find((a) => a.startsWith('--since='))
-  if (!arg) return undefined
-
-  const value = arg.slice('--since='.length)
-  const days = Number(value)
-  if (Number.isFinite(days) && days > 0) return Math.floor(Date.now() / 1000) - days * 86400
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) throw new Error(`--since expects a day count or an ISO date, got: ${value}`)
-  return Math.floor(date.getTime() / 1000)
-}
+const { parseSince } = await import('./since.ts')
 
 const key = process.env.STEAM_API_KEY
 if (!key) {
