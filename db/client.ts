@@ -49,7 +49,17 @@ export function getDb(): Db {
 
 // A CLI job holding an open pool never exits. Serverless callers never need this.
 export async function closeDb(): Promise<void> {
-  await pool?.end()
+  const poolToClose = pool
   pool = undefined
   instance = undefined
+
+  if (poolToClose) {
+    try {
+      await poolToClose.end()
+    } catch {
+      // Ignore close errors. We've cleared pool and instance above, so a stale
+      // client won't be returned by getDb(). Swallowing the error here prevents
+      // close failures from masking the actual error that triggered closeDb.
+    }
+  }
 }
