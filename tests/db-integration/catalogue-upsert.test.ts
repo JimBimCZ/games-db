@@ -56,4 +56,21 @@ describe('upsertAppBatch', () => {
     expect(new Date(rows[0]!.next_attempt_at).getUTCFullYear()).toBe(2030)
     expect(new Date(rows[0]!.last_seen_in_list_at).getUTCMonth()).toBe(1)
   })
+
+  it('writes steam_last_modified and price_change_number', async () => {
+    const db = getDb()
+    await upsertAppBatch(
+      db,
+      [{ appid: APPID, name: 'Fixture One', lastModified: 1745368572, priceChangeNumber: 4321 }],
+      'game',
+      new Date('2026-01-01'),
+    )
+
+    const { rows } = await db.execute<{ steam_last_modified: string; price_change_number: number }>(
+      sql`select steam_last_modified, price_change_number from steam_app where appid = ${APPID}`,
+    )
+
+    expect(new Date(rows[0]!.steam_last_modified).getTime()).toBe(1745368572 * 1000)
+    expect(rows[0]!.price_change_number).toBe(4321)
+  })
 })

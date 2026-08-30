@@ -1,3 +1,4 @@
+import { desc } from 'drizzle-orm'
 import {
   boolean,
   index,
@@ -82,11 +83,20 @@ export const steamApp = pgTable(
     name: text('name').notNull(),
     appType: text('app_type'),
     lastSeenInListAt: timestamp('last_seen_in_list_at', { withTimezone: true }),
+    steamLastModified: timestamp('steam_last_modified', { withTimezone: true }),
+    priceChangeNumber: integer('price_change_number'),
     hydrationState: hydrationState('hydration_state').notNull().default('pending'),
     failureCount: integer('failure_count').notNull().default(0),
     nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
   },
-  (t) => [index('steam_app_queue_idx').on(t.hydrationState, t.nextAttemptAt)],
+  (t) => [
+    index('steam_app_queue_idx').on(
+      t.hydrationState,
+      t.nextAttemptAt,
+      t.appType,
+      desc(t.steamLastModified),
+    ),
+  ],
 )
 
 export const game = pgTable(
