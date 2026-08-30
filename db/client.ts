@@ -47,6 +47,19 @@ export function getDb(): Db {
   return instance
 }
 
+export type JobDb = NodePgDatabase<typeof schema>
+
+// The shared Db type omits transaction because neon-http has none. Hydration writes game,
+// media, genres, categories and price together or not at all, so jobs need the real thing —
+// and they only ever run where node-postgres is the driver.
+export function getJobDb(): JobDb {
+  const driver = resolveDriver(process.env)
+  if (driver !== 'node-postgres') {
+    throw new Error(`Jobs require the node-postgres driver, got ${driver}`)
+  }
+  return getDb() as JobDb
+}
+
 // A CLI job holding an open pool never exits. Serverless callers never need this.
 export async function closeDb(): Promise<void> {
   const poolToClose = pool

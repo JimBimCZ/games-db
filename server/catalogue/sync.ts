@@ -25,7 +25,16 @@ export async function upsertAppBatch(
 
   await db
     .insert(steamApp)
-    .values(rows.map((r) => ({ appid: r.appid, name: r.name, appType, lastSeenInListAt: seenAt })))
+    .values(
+      rows.map((r) => ({
+        appid: r.appid,
+        name: r.name,
+        appType,
+        lastSeenInListAt: seenAt,
+        steamLastModified: r.lastModified === undefined ? null : new Date(r.lastModified * 1000),
+        priceChangeNumber: r.priceChangeNumber ?? null,
+      })),
+    )
     .onConflictDoUpdate({
       target: steamApp.appid,
       // hydration_state, failure_count and next_attempt_at belong to the hydration queue.
@@ -34,6 +43,8 @@ export async function upsertAppBatch(
         name: sql`excluded.name`,
         appType: sql`excluded.app_type`,
         lastSeenInListAt: sql`excluded.last_seen_in_list_at`,
+        steamLastModified: sql`excluded.steam_last_modified`,
+        priceChangeNumber: sql`excluded.price_change_number`,
       },
     })
 }

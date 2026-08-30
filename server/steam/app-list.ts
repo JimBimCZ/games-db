@@ -6,6 +6,7 @@ const entrySchema = z.object({
   appid: z.number().int(),
   name: z.string(),
   last_modified: z.number().int().optional(),
+  price_change_number: z.number().int().optional(),
 })
 
 const pageSchema = z.object({
@@ -16,7 +17,12 @@ const pageSchema = z.object({
   }),
 })
 
-export type SteamAppListEntry = { appid: number; name: string; lastModified?: number }
+export type SteamAppListEntry = {
+  appid: number
+  name: string
+  lastModified?: number
+  priceChangeNumber?: number
+}
 export type AppListPage = { apps: SteamAppListEntry[]; haveMore: boolean; lastAppid?: number }
 export type AppListFlags = { includeGames?: boolean; includeDlc?: boolean; ifModifiedSince?: number }
 
@@ -25,7 +31,12 @@ export const MAX_RESULTS = 50000
 export function parseAppListPage(raw: unknown): AppListPage {
   const { response } = pageSchema.parse(raw)
   return {
-    apps: response.apps.map((a) => ({ appid: a.appid, name: a.name, lastModified: a.last_modified })),
+    apps: response.apps.map((a) => ({
+      appid: a.appid,
+      name: a.name,
+      lastModified: a.last_modified,
+      priceChangeNumber: a.price_change_number,
+    })),
     haveMore: response.have_more_results ?? false,
     lastAppid: response.last_appid,
   }

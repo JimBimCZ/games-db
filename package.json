@@ -15,12 +15,15 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "sync:catalogue": "node --conditions=react-server server/catalogue/cli.mts"
+    "sync:catalogue": "node --conditions=react-server server/catalogue/cli.mts",
+    "hydrate": "node --conditions=react-server server/catalogue/hydrate-cli.mts",
+    "refresh:prices": "node --conditions=react-server server/catalogue/prices-cli.mts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "1.11.3",
     "@neondatabase/serverless": "^1.1.0",
     "drizzle-orm": "^0.45.2",
+    "isomorphic-dompurify": "^3.23.0",
     "next": "16.3.3",
     "next-auth": "5.0.0-beta.32",
     "pg": "^8.23.0",

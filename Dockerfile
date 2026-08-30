@@ -33,6 +33,19 @@ RUN mkdir -p /app/runtime-modules/@neondatabase && \
   cp -rL /app/node_modules/server-only /app/runtime-modules/server-only && \
   cp -rL /app/node_modules/@neondatabase/serverless /app/runtime-modules/@neondatabase/serverless
 
+# server/catalogue/map-app-details.ts imports isomorphic-dompurify, which unconditionally
+# constructs a JSDOM at module load (it has no browser/server branch), so jsdom's own
+# dependency tree ships too — a flat cp -rL per name, as done above, is not safe for it: pnpm
+# resolves a genuine version split for this tree (jsdom needs whatwg-url 17.x directly, its own
+# data-urls dependency needs whatwg-url 16.x) that only pnpm's per-package node_modules nesting
+# keeps apart, and several of the ~40 nested store directories are named with a peer-dependency
+# hash that cannot be reconstructed by hand and would rot on a lockfile bump. So this walks the
+# real symlinks node_modules/.pnpm already resolved at install time and mirrors that slice of
+# the store as-is (verified against an isolated copy: both whatwg-url versions present, entity
+# decoding in parse5 working, sanitize() stripping <script> and onerror as expected), instead of
+# hand-listing package names the way the four packages above are.
+RUN node -e "const fs=require('fs'),path=require('path');const store='node_modules/.pnpm';const dest='/app/runtime-modules';const seen=new Set();function walk(dir){if(seen.has(dir))return;seen.add(dir);const nm=path.join(store,dir,'node_modules');if(!fs.existsSync(nm))return;for(const entry of fs.readdirSync(nm,{withFileTypes:true})){const full=path.join(nm,entry.name);if(entry.isSymbolicLink()){const real=fs.realpathSync(full);const m=real.match(/\.pnpm\/([^/]+)\/node_modules\//);if(m)walk(m[1]);}else if(entry.name.startsWith('@')&&entry.isDirectory()){for(const sub of fs.readdirSync(full)){const subfull=path.join(full,sub);if(fs.lstatSync(subfull).isSymbolicLink()){const real=fs.realpathSync(subfull);const m=real.match(/\.pnpm\/([^/]+)\/node_modules\//);if(m)walk(m[1]);}}}}}walk('isomorphic-dompurify@3.23.0');for(const dir of seen){fs.mkdirSync(path.join(dest,'.pnpm',dir,'node_modules'),{recursive:true});fs.cpSync(path.join(store,dir,'node_modules'),path.join(dest,'.pnpm',dir,'node_modules'),{recursive:true});}fs.symlinkSync('.pnpm/isomorphic-dompurify@3.23.0/node_modules/isomorphic-dompurify',path.join(dest,'isomorphic-dompurify'));if(seen.size<20)throw new Error('isomorphic-dompurify dependency walk found suspiciously few packages: '+seen.size);console.log('isomorphic-dompurify runtime deps:',seen.size,'pnpm store dirs copied');"
+
 FROM node:24-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production

@@ -12,7 +12,12 @@ describe('parseAppListPage', () => {
   it('parses a full page', () => {
     const page = parseAppListPage(fixture('app-list-page.json'))
     expect(page.apps).toHaveLength(3)
-    expect(page.apps[0]).toEqual({ appid: 10, name: 'Counter-Strike', lastModified: 1745368572 })
+    expect(page.apps[0]).toEqual({
+      appid: 10,
+      name: 'Counter-Strike',
+      lastModified: 1745368572,
+      priceChangeNumber: 37149137,
+    })
     expect(page.haveMore).toBe(true)
     expect(page.lastAppid).toBe(508530)
   })
@@ -26,6 +31,21 @@ describe('parseAppListPage', () => {
 
   it('rejects a malformed page', () => {
     expect(() => parseAppListPage({ response: { apps: [{ appid: 'ten' }] } })).toThrow()
+  })
+
+  it('carries price_change_number through', () => {
+    const page = parseAppListPage({
+      response: {
+        apps: [{ appid: 10, name: 'Counter-Strike', last_modified: 1745368572, price_change_number: 4321 }],
+        have_more_results: false,
+      },
+    })
+    expect(page.apps[0]).toEqual({
+      appid: 10,
+      name: 'Counter-Strike',
+      lastModified: 1745368572,
+      priceChangeNumber: 4321,
+    })
   })
 })
 
