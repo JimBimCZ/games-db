@@ -10,6 +10,7 @@ const EXPECTED_TABLE_NAMES = [
   'sessions',
   'verification_tokens',
   'steam_app',
+  'steam_list',
   'game',
   'game_media',
   'genre',
