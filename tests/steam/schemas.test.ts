@@ -48,6 +48,12 @@ describe('parseAppDetails', () => {
     expect(parseAppDetails(fixture('appdetails-620.json'), 570)).toEqual({ kind: 'unavailable' })
   })
 
+  it('treats an explicit null data payload as unavailable rather than throwing', () => {
+    expect(parseAppDetails({ '620': { success: true, data: null } }, 620)).toEqual({
+      kind: 'unavailable',
+    })
+  })
+
   it('throws a SteamParseError naming the field when the shape changes', () => {
     const broken = { '620': { success: true, data: { steam_appid: '620', type: 'game', name: 'x' } } }
     try {
@@ -74,6 +80,17 @@ describe('parsePriceOverviewBatch', () => {
     }
   })
 
+  it('parses the discounted row with initial and final not swapped', () => {
+    const prices = parsePriceOverviewBatch(fixture('price-overview-batch.json'))
+    expect(prices.get(1174180)).toEqual({
+      currency: 'EUR',
+      initialMinor: 5999,
+      finalMinor: 1499,
+      discountPercent: 75,
+    })
+    expect(prices.get(570)).toBeNull()
+  })
+
   it('maps a free game with an empty data array to null', () => {
     const prices = parsePriceOverviewBatch({ '570': { success: true, data: [] } })
     expect(prices.get(570)).toBeNull()
@@ -81,6 +98,11 @@ describe('parsePriceOverviewBatch', () => {
 
   it('maps an unsuccessful entry to null', () => {
     const prices = parsePriceOverviewBatch({ '999999999': { success: false } })
+    expect(prices.get(999999999)).toBeNull()
+  })
+
+  it('maps an explicit null data payload to null rather than throwing', () => {
+    const prices = parsePriceOverviewBatch({ '999999999': { success: true, data: null } })
     expect(prices.get(999999999)).toBeNull()
   })
 })

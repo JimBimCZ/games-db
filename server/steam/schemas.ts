@@ -17,18 +17,26 @@ const priceOverviewSchema = z.object({
   currency: z.string(),
   initial: z.number().int(),
   final: z.number().int(),
-  discount_percent: z.number().int().default(0),
+  // Required, not defaulted: a missing discount_percent defaulting to 0 would make a genuine
+  // sale look full-price instead of surfacing as a parse failure.
+  discount_percent: z.number().int(),
 })
 
-const mediaEntrySchema = z.object({
-  id: z.number().int().optional(),
-  name: z.string().optional(),
-  thumbnail: z.string().optional(),
-  highlight: z.boolean().optional(),
-  path_thumbnail: z.string().optional(),
-  path_full: z.string().optional(),
+const screenshotSchema = z.object({
+  id: z.number().int(),
+  path_thumbnail: z.string(),
+  path_full: z.string(),
+})
+
+const movieSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  thumbnail: z.string(),
+  highlight: z.boolean(),
   // Observed live: these are plain URL strings, not per-quality variant objects, and no mp4
   // or webm key appears at all. See docs/superpowers/specs/2026-08-30-m3-observations.md §1a.
+  // Kept optional, unlike the rest of this schema: a movie missing one codec is plausible and
+  // unproven either way from a four-app sample.
   hls_h264: z.string().optional(),
   dash_h264: z.string().optional(),
   dash_av1: z.string().optional(),
@@ -38,14 +46,19 @@ const appDetailsDataSchema = z.object({
   steam_appid: z.number().int(),
   type: z.string(),
   name: z.string(),
-  is_free: z.boolean().default(false),
+  // Required, not defaulted: a missing is_free defaulting to false would make a genuine free
+  // game look paid instead of surfacing as a parse failure.
+  is_free: z.boolean(),
   short_description: z.string().optional(),
   about_the_game: z.string().optional(),
   detailed_description: z.string().optional(),
   header_image: z.string().optional(),
   capsule_image: z.string().optional(),
   background_raw: z.string().optional(),
-  release_date: z.object({ coming_soon: z.boolean().default(false), date: z.string().default('') }).optional(),
+  // coming_soon and date required, not defaulted: a missing coming_soon defaulting to false
+  // would make an unreleased game look released. An empty date string still parses honestly;
+  // it is the coming_soon default that would silently lie.
+  release_date: z.object({ coming_soon: z.boolean(), date: z.string() }).optional(),
   developers: z.array(z.string()).optional(),
   publishers: z.array(z.string()).optional(),
   platforms: z.object({ windows: z.boolean(), mac: z.boolean(), linux: z.boolean() }).optional(),
@@ -60,8 +73,8 @@ const appDetailsDataSchema = z.object({
   price_overview: priceOverviewSchema.optional(),
   genres: z.array(z.object({ id: z.string(), description: z.string() })).optional(),
   categories: z.array(z.object({ id: z.number().int(), description: z.string() })).optional(),
-  screenshots: z.array(mediaEntrySchema).optional(),
-  movies: z.array(mediaEntrySchema).optional(),
+  screenshots: z.array(screenshotSchema).optional(),
+  movies: z.array(movieSchema).optional(),
   // Observed as both an object with minimum/recommended HTML and an empty array, so it is
   // stored as-is in a jsonb column rather than given a shape it does not always have.
   pc_requirements: z.unknown().optional(),
@@ -92,7 +105,10 @@ export function parseAppDetails(raw: unknown, appid: number): AppDetailsResult {
   // A payload keyed by a different appid is not ours to write: appdetails redirects some
   // appids to their base game, and writing that payload under the requested appid would
   // silently duplicate one game across two rows.
-  if (!entry || !entry.success || entry.data === undefined) return { kind: 'unavailable' }
+  // entry.data == null (loose) catches both a missing key and an explicit null: delisted and
+  // region-locked apps can return either, and both are the normal "no data" case, not a shape
+  // change.
+  if (!entry || !entry.success || entry.data == null) return { kind: 'unavailable' }
 
   const parsed = appDetailsDataSchema.safeParse(entry.data)
   if (!parsed.success) {
@@ -129,8 +145,10 @@ export function parsePriceOverviewBatch(raw: unknown): Map<number, PriceOverview
     const appid = Number(key)
     if (!Number.isInteger(appid)) continue
 
-    // Free games return "data": [] — an empty array, not an object.
-    if (!entry.success || entry.data === undefined || Array.isArray(entry.data)) {
+    // Free games return "data": [] — an empty array, not an object. entry.data == null
+    // (loose) catches both a missing key and an explicit null, the normal delisted/region-locked
+    // case, not a shape change.
+    if (!entry.success || entry.data == null || Array.isArray(entry.data)) {
       out.set(appid, null)
       continue
     }
@@ -164,9 +182,12 @@ const reviewSummarySchema = z.object({
   query_summary: z.object({
     review_score: z.number().int().optional(),
     review_score_desc: z.string().optional(),
-    total_positive: z.number().int().default(0),
-    total_negative: z.number().int().default(0),
-    total_reviews: z.number().int().default(0),
+    // Required, not defaulted: db/schema.ts declares these columns nullable precisely so a
+    // real absence can be stored as such, rather than a default of 0 masquerading as a
+    // genuine zero-review count.
+    total_positive: z.number().int(),
+    total_negative: z.number().int(),
+    total_reviews: z.number().int(),
   }),
 })
 
