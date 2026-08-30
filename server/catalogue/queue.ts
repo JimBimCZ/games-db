@@ -39,10 +39,14 @@ export async function selectDueApps(
   const typeFilter = opts.type ? sql`and app_type = ${opts.type}` : sql``
   const { rows } = await db.execute<{ appid: number }>(sql`
     select appid from steam_app
+    left join lateral (
+      select min(rank) as rank from steam_list where steam_list.appid = steam_app.appid
+    ) listed on true
     where hydration_state in ('pending', 'failed')
       and (next_attempt_at is null or next_attempt_at <= now())
       ${typeFilter}
-    order by (app_type = 'game') desc, steam_last_modified desc nulls last, appid
+    order by listed.rank nulls last,
+             (app_type = 'game') desc, steam_last_modified desc nulls last, appid
     limit ${opts.limit}
   `)
   return rows.map((r) => r.appid)

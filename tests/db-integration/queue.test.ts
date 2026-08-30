@@ -12,7 +12,7 @@ import {
 } from '@/server/catalogue/queue'
 
 const BASE = 2147481000
-const IDS = [BASE, BASE + 1, BASE + 2, BASE + 3]
+const IDS = [BASE, BASE + 1, BASE + 2, BASE + 3, BASE + 4]
 
 // steam_app holds ~245,000 due rows, all carrying a last_modified from the most recent sync,
 // so a small limit returns a slice that never reaches the seeded rows and every ordering
@@ -28,7 +28,11 @@ const seed = async () => {
       (${IDS[0]}, 'Old game',   'game', 'pending', '2020-01-01'),
       (${IDS[1]}, 'New game',   'game', 'pending', '2026-08-01'),
       (${IDS[2]}, 'No date',    'game', 'pending', null),
-      (${IDS[3]}, 'Recent dlc', 'dlc',  'pending', '2026-08-20')
+      (${IDS[3]}, 'Recent dlc', 'dlc',  'pending', '2026-08-20'),
+      (${IDS[4]}, 'Listed old', 'game', 'pending', '2019-01-01')
+  `)
+  await db.execute(sql`
+    insert into steam_list (kind, appid, rank) values ('top_sellers', ${IDS[4]}, 1)
   `)
 }
 
@@ -41,7 +45,15 @@ describe('the hydration queue', () => {
   it('orders games before DLC and recent before old, with nulls last', async () => {
     const due = await selectDueApps(getJobDb(), { limit: WHOLE_QUEUE })
     const ours = due.filter((id) => IDS.includes(id))
-    expect(ours).toEqual([IDS[1], IDS[0], IDS[2], IDS[3]])
+    expect(ours).toEqual([IDS[4], IDS[1], IDS[0], IDS[2], IDS[3]])
+  })
+
+  it('puts a listed app ahead of an unlisted one that would otherwise sort first', async () => {
+    const due = await selectDueApps(getJobDb(), { limit: WHOLE_QUEUE })
+    const ours = due.filter((id) => IDS.includes(id))
+    // IDS[4] is the oldest game seeded: without its list rank it would sort behind IDS[0].
+    expect(ours[0]).toBe(IDS[4])
+    expect(ours.indexOf(IDS[4]!)).toBeLessThan(ours.indexOf(IDS[0]!))
   })
 
   it('filters by type when asked', async () => {
