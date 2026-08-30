@@ -3,9 +3,9 @@ import { DrizzleAdapter } from '@auth/drizzle-adapter'
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core'
 import NextAuth from 'next-auth'
 import GitHub from 'next-auth/providers/github'
-import { getDb } from '@/db/client'
-import { accounts, sessions, users } from '@/db/schema'
-import { projectSession } from './session'
+import { getDb } from '@/db/client.ts'
+import { accounts, sessions, users } from '@/db/schema.ts'
+import { projectSession } from './session.ts'
 
 // next build evaluates route modules while collecting page data, so building the adapter at
 // module scope would construct a database client during a build that has no DATABASE_URL.

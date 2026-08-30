@@ -1,5 +1,5 @@
 'use server'
-import { signIn, signOut } from './config'
+import { signIn, signOut } from './config.ts'
 
 export async function signInAction() {
   await signIn('github', { redirectTo: '/' })

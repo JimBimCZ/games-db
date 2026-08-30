@@ -18,3 +18,38 @@ describe('resolveDriver', () => {
     expect(() => resolveDriver({ DB_DRIVER: 'mysql' })).toThrow(/Unsupported DB_DRIVER/)
   })
 })
+
+describe('closeDb', () => {
+  it('is safe to call when no client was ever created', async () => {
+    const { closeDb } = await import('@/db/client')
+    await expect(closeDb()).resolves.toBeUndefined()
+  })
+
+  it('can be called multiple times without rejecting', async () => {
+    const { closeDb } = await import('@/db/client')
+    await closeDb()
+    await expect(closeDb()).resolves.toBeUndefined()
+  })
+
+  it('getDb() after closeDb() creates a fresh instance', async () => {
+    const originalUrl = process.env.DATABASE_URL
+    const originalDbDriver = process.env.DB_DRIVER
+    try {
+      process.env.DATABASE_URL = 'postgresql://localhost/test'
+      process.env.DB_DRIVER = 'node-postgres'
+
+      const { getDb, closeDb } = await import('@/db/client')
+
+      const firstInstance = getDb()
+      await closeDb()
+      const secondInstance = getDb()
+
+      expect(firstInstance).not.toBe(secondInstance)
+    } finally {
+      if (originalUrl !== undefined) process.env.DATABASE_URL = originalUrl
+      else delete process.env.DATABASE_URL
+      if (originalDbDriver !== undefined) process.env.DB_DRIVER = originalDbDriver
+      else delete process.env.DB_DRIVER
+    }
+  })
+})
