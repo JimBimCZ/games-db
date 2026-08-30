@@ -1,12 +1,17 @@
 import 'server-only'
 
 export class SteamHttpError extends Error {
-  constructor(
-    readonly status: number,
-    readonly bodyPreview: string,
-  ) {
+  // Not parameter properties: Node's strip-only type stripping (used by the sync.ts CLI
+  // via `node --conditions=react-server`) can erase type annotations but not this
+  // TypeScript-only constructor sugar, which emits assignment statements.
+  readonly status: number
+  readonly bodyPreview: string
+
+  constructor(status: number, bodyPreview: string) {
     super(`Steam returned HTTP ${status}: ${bodyPreview.slice(0, 120)}`)
     this.name = 'SteamHttpError'
+    this.status = status
+    this.bodyPreview = bodyPreview
   }
 }
 

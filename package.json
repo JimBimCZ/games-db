@@ -14,7 +14,8 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "sync:catalogue": "node --conditions=react-server server/catalogue/cli.mts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "1.11.3",
