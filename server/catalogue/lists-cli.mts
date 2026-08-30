@@ -33,10 +33,14 @@ if (kind !== undefined && !(STORE_LIST_KINDS as readonly string[]).includes(kind
 const started = Date.now()
 try {
   const counts = await syncLists({ depth, kind: kind as StoreListKind | undefined })
-  const total = Object.values(counts).reduce((a, b) => a + b, 0)
+  const entries = Object.entries(counts)
+  const total = entries.reduce((a, [, v]) => a + (v ?? 0), 0)
+  const elapsed = ((Date.now() - started) / 1000).toFixed(1)
   console.log(
-    `synced ${total} list entries in ${((Date.now() - started) / 1000).toFixed(1)}s: ` +
-      Object.entries(counts).map(([k, v]) => `${k} ${v}`).join(', '),
+    entries.length === 0
+      ? `nothing was walked in ${elapsed}s; another sync:lists run held the lock`
+      : `synced ${total} list entries in ${elapsed}s: ` +
+          entries.map(([k, v]) => `${k} ${v}`).join(', '),
   )
 } catch (err) {
   // Logging the error object rather than its message preserves `cause`.

@@ -23,11 +23,23 @@ const LIST_PARAMS: Record<StoreListKind, Record<string, string>> = {
   new_releases: { sort_by: 'Released_DESC' },
 }
 
+// Kept local to this module rather than joining server/steam/schemas.ts: the HTML envelope
+// is specific to this one undocumented endpoint, and keeping its schema next to the parser
+// that depends on it is more consistent with the containment argument in §1.5 of the design
+// doc than centralising it with the JSON schemas the rest of the client uses.
 const pageSchema = z.object({
+  success: z.number(),
   results_html: z.string(),
   total_count: z.number().int(),
   start: z.number().int(),
 })
+
+export class StoreSearchEnvelopeError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'StoreSearchEnvelopeError'
+  }
+}
 
 export type SearchRow = { appid: number; name: string }
 export type SearchPage = { rows: SearchRow[]; totalCount: number; start: number }
@@ -62,6 +74,11 @@ const decode = (s: string) => s.replace(/&(?:amp|lt|gt|quot|#039);/g, (m) => ENT
 
 export function parseSearchPage(raw: unknown): SearchPage {
   const page = pageSchema.parse(raw)
+  if (page.success !== 1) {
+    throw new StoreSearchEnvelopeError(
+      `store search envelope has success=${page.success}, not 1; the request may be malformed or the endpoint may be erroring`,
+    )
+  }
   const rows: SearchRow[] = []
 
   // Split on the row marker rather than matching appid and title with one lazy scan
@@ -70,7 +87,15 @@ export function parseSearchPage(raw: unknown): SearchPage {
   // row's title, mis-attributing it and silently dropping that next row.
   const segments = page.results_html.split('data-ds-appid="').slice(1)
   for (const segment of segments) {
-    const appid = Number(/^\d+/.exec(segment)![0])
+    // Anchored on the closing quote, not just a leading digit run: a bundle or package row
+    // (excluded by category1=998, but not something the markup guarantees never appears)
+    // carries a comma-joined data-ds-appid like "440,570", and /^\d+/ would silently take
+    // just "440" — the same silent-misattribution class already fixed once on the title side.
+    const idMatch = /^(\d+)"/.exec(segment)
+    if (!idMatch) {
+      throw new Error(`store search row has a non-appid data-ds-appid; the markup may have changed`)
+    }
+    const appid = Number(idMatch[1])
     const titleMatch = /<span class="title">([^<]*)<\/span>/.exec(segment)
     if (!titleMatch) {
       throw new Error(
@@ -85,9 +110,8 @@ export function parseSearchPage(raw: unknown): SearchPage {
 
 export async function fetchList(
   kind: StoreListKind,
-  opts: { depth: number; cc: string; l: string; delayMs?: number },
+  opts: { depth: number; cc: string; l: string },
 ): Promise<SearchRow[]> {
-  const delayMs = opts.delayMs ?? 0
   const rows: SearchRow[] = []
   const seen = new Set<number>()
   let wanted = opts.depth
@@ -120,7 +144,16 @@ export async function fetchList(
     }
 
     if (page.rows.length < PAGE_SIZE) break
-    if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs))
+  }
+
+  // A second tripwire alongside the zero-row one above: a page that is short but not empty
+  // would pass the zero-row check yet still leave the list under-collected if total_count
+  // says more remain. That is the same "markup changed" failure mode, just partial instead
+  // of total, and it would otherwise slip through as a silently short list.
+  if (rows.length < wanted) {
+    throw new Error(
+      `store search collected only ${rows.length} of ${wanted} wanted appids for ${kind}; the markup may have changed`,
+    )
   }
 
   return rows.slice(0, opts.depth)

@@ -69,10 +69,11 @@ COPY --from=builder --chown=node:node /app/server ./server
 # these job sources, not from any traced route, so Next's standalone trace drops them.
 COPY --from=builder --chown=node:node /app/runtime-modules ./node_modules
 
-# Smoke-imports the sync job against exactly the node_modules this image ships. No
+# Smoke-imports the sync and lists jobs against exactly the node_modules this image ships. No
 # DATABASE_URL or network needed — this is what catches a package missed from the
-# hand-maintained runtime-modules list above (see that comment).
-RUN node --conditions=react-server -e "await import('./server/catalogue/sync.ts')"
+# hand-maintained runtime-modules list above (see that comment). sync.ts alone does not reach
+# store-search.ts or lists.ts, so importing only it would leave the new sync:lists job unchecked.
+RUN node --conditions=react-server -e "await import('./server/catalogue/sync.ts'); await import('./server/catalogue/lists.ts')"
 
 USER node
 EXPOSE 3000

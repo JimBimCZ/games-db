@@ -85,6 +85,19 @@ describe('parseSearchPage', () => {
       parseSearchPage({ success: 1, total_count: 3, start: 0, results_html: html }),
     ).toThrow(/appid 2\b/)
   })
+
+  it('throws rather than truncating a comma-joined data-ds-appid to its first component', () => {
+    const html = '<a data-ds-appid="440,570"><span class="title">Some Bundle</span></a>'
+    expect(() =>
+      parseSearchPage({ success: 1, total_count: 1, start: 0, results_html: html }),
+    ).toThrow(/data-ds-appid/)
+  })
+
+  it('rejects an envelope whose success flag is not 1', () => {
+    expect(() =>
+      parseSearchPage({ success: 0, total_count: 0, start: 0, results_html: '' }),
+    ).toThrow(/success/)
+  })
 })
 
 const respondWith = (bodies: unknown[]) => {
@@ -137,5 +150,22 @@ describe('fetchList', () => {
       { appid: 730, name: 'Counter-Strike 2' },
       { appid: 570, name: 'Dota 2' },
     ])
+  })
+
+  it('throws when a short page ends the walk with fewer rows than total_count promised', async () => {
+    const row = (id: number) =>
+      `<a data-ds-appid="${id}"><span class="title">Game ${id}</span></a>`
+    respondWith([
+      {
+        success: 1,
+        total_count: 60,
+        start: 0,
+        results_html: Array.from({ length: 30 }, (_, i) => row(i + 1)).join(''),
+      },
+    ])
+
+    await expect(
+      fetchList('top_sellers', { depth: 100, cc: 'cz', l: 'english' }),
+    ).rejects.toThrow(/30 of 60/)
   })
 })

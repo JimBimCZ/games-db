@@ -18,22 +18,29 @@ export function rankedRows(kind: StoreListKind, rows: SearchRow[], now: Date) {
 }
 
 export async function syncLists(
-  opts: { depth?: number; kind?: StoreListKind; delayMs?: number } = {},
-): Promise<Record<StoreListKind, number>> {
+  opts: { depth?: number; kind?: StoreListKind } = {},
+): Promise<Partial<Record<StoreListKind, number>>> {
   const db = getJobDb()
   const { steamCountryCode: cc, steamLanguage: l } = serverEnv()
   const depth = opts.depth ?? DEFAULT_DEPTH
   const kinds = opts.kind ? [opts.kind] : STORE_LIST_KINDS
-  const counts = { top_sellers: 0, specials: 0, coming_soon: 0, new_releases: 0 }
+  const counts: Partial<Record<StoreListKind, number>> = {}
 
   if (!(await tryAdvisoryLock(db, LISTS_LOCK_KEY))) {
-    console.log('another sync:lists run holds the lock; exiting')
+    console.log('another sync:lists run holds the lock; exiting — nothing was walked')
     return counts
   }
 
   try {
     for (const kind of kinds) {
-      const rows = await fetchList(kind, { depth, cc, l, delayMs: opts.delayMs })
+      const rows = await fetchList(kind, { depth, cc, l })
+      if (rows.length === 0) {
+        // Steam serving a genuinely empty list is not handled — a stale list beats an empty
+        // one, and this run stops rather than replacing real membership with nothing. Without
+        // this check the empty values() below would fail inside Drizzle instead, which reads
+        // as a library bug rather than the deliberate guarantee it actually is.
+        throw new Error(`store search returned zero appids for ${kind}; refusing to replace its membership`)
+      }
       const now = new Date()
 
       // One transaction per list, entered only after the whole walk succeeded: a failure

@@ -81,7 +81,7 @@ describe('schema', () => {
     expect(columns).toContain('price_seen_currency')
   })
 
-  it('declares exactly the sixteen tables the spec names', () => {
+  it('declares exactly the seventeen tables the spec names', () => {
     const tableNames = schemaTables()
       .map((t) => getTableConfig(t).name)
       .sort()
