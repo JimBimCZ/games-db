@@ -75,3 +75,16 @@ test('searching then navigating away does not bounce back to search', async ({ p
   await page.waitForTimeout(1000)
   await expect(page).toHaveURL(/\/top-sellers$/)
 })
+
+test('the library redirects a signed-out visitor to sign in', async ({ page }) => {
+  await page.goto('/library')
+  await expect(page).toHaveURL(/\/signin$/)
+})
+
+// The control is hidden rather than disabled for signed-out visitors, so a browse page
+// must render exactly the markup it did before M6.
+test('browse cards carry no library control when signed out', async ({ page }) => {
+  await page.goto('/top-sellers')
+  await expect(page.locator('a[href^="/game/"]').first()).toBeVisible()
+  expect(await page.getByLabel(/^Library status for /).count()).toBe(0)
+})
