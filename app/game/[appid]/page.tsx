@@ -5,12 +5,17 @@ import { DlcSection } from '@/components/detail/dlc-list'
 import { LanguageSection } from '@/components/detail/language-table'
 import { PriceChartSection } from '@/components/detail/price-chart'
 import { RequirementsSection } from '@/components/detail/requirements'
+import { StatusControl } from '@/components/library/status-control'
 import { MediaViewer } from '@/components/media-viewer'
 import { PriceCard } from '@/components/price-card'
 import { ReviewBar } from '@/components/review-bar'
+import { priceDelta } from '@/lib/format/price-delta'
+import { statusSince } from '@/lib/format/status-history'
+import { currentUserId } from '@/server/auth/current-user'
 import { parseAppid } from '@/server/browse/params'
 import { getReviewSummary } from '@/server/catalogue/review-summary'
 import { gameDetailFull } from '@/server/detail/queries'
+import { libraryEntryFor } from '@/server/library/queries'
 
 type Platforms = { windows?: boolean; mac?: boolean; linux?: boolean }
 
@@ -45,6 +50,19 @@ export default async function GamePage({ params }: { params: Promise<{ appid: st
   // live Steam call CLAUDE.md permits, for a game the user explicitly opened. It swallows and
   // logs its own failures, so a Steam outage costs the block, not the page.
   const reviews = await getReviewSummary(parsedAppid)
+
+  const entry = await libraryEntryFor(parsedAppid)
+  const since = entry ? statusSince(entry.status, entry.statusSince) : null
+  const delta =
+    entry && entry.status === 'wishlist'
+      ? priceDelta(
+          entry.priceSeenMinor,
+          entry.priceSeenCurrency,
+          detail.price?.finalMinor ?? null,
+          detail.price?.currency ?? null,
+        )
+      : null
+  const sessionUserPresent = (await currentUserId()) !== null
 
   const platforms = platformNames(detail.platforms)
   const developers = detail.developers ?? []
@@ -116,6 +134,18 @@ export default async function GamePage({ params }: { params: Promise<{ appid: st
             releaseDateText={detail.releaseDateText}
             releaseComingSoon={detail.releaseComingSoon}
           />
+
+          {sessionUserPresent ? (
+            <div>
+              <StatusControl appid={detail.appid} title={detail.name} status={entry?.status ?? null} />
+              {since ? <p className="mt-1.5 text-text-dim">{since}</p> : null}
+              {delta ? (
+                <p className="mt-0.5 text-text-dim">
+                  {delta.direction === 'down' ? '↓' : '↑'} {delta.label} since you wishlisted it
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <ReviewBar summary={reviews} />
 

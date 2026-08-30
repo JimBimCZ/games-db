@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { projectSession } from '@/server/auth/session'
+import type { Session } from 'next-auth'
+import { projectSession, userIdFromSession } from '@/server/auth/session'
 
 describe('projectSession', () => {
   const expires = new Date('2026-09-30T00:00:00Z')
@@ -29,5 +30,22 @@ describe('projectSession', () => {
       expires,
     )
     expect(session.expires).toBe(expires)
+  })
+})
+
+describe('userIdFromSession', () => {
+  it('returns the id of a signed-in user', () => {
+    const session = { user: { id: 'u1' }, expires: '' } as unknown as Session
+    expect(userIdFromSession(session)).toBe('u1')
+  })
+
+  it('returns null with no session', () => {
+    expect(userIdFromSession(null)).toBeNull()
+  })
+
+  // next-auth types user.id as optional, so a session can type-check without one.
+  it('returns null when the session carries no id', () => {
+    const session = { user: { name: 'x' }, expires: '' } as unknown as Session
+    expect(userIdFromSession(session)).toBeNull()
   })
 })

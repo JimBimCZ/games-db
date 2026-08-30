@@ -17,3 +17,7 @@ export function projectSession(
     expires,
   } as Session
 }
+
+export function userIdFromSession(session: Session | null): string | null {
+  return session?.user?.id ?? null
+}
