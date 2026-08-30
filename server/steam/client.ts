@@ -20,6 +20,10 @@ export async function steamFetchJson(url: URL, opts: FetchOptions = {}): Promise
   const retries = opts.retries ?? 3
   const backoffMs = opts.backoffMs ?? 1000
 
+  if (retries < 0) {
+    throw new RangeError(`retries must be non-negative, got ${retries}`)
+  }
+
   let lastError: SteamHttpError | undefined
   for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await fetch(url)

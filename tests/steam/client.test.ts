@@ -53,4 +53,10 @@ describe('steamFetchJson', () => {
     vi.stubGlobal('fetch', vi.fn(async () => respond(200, 'not json', 'text/plain')))
     await expect(steamFetchJson(url, { retries: 0 })).rejects.toThrow(/not valid JSON/i)
   })
+
+  it('rejects a negative retry budget immediately', async () => {
+    await expect(steamFetchJson(url, { retries: -1 })).rejects.toThrow(
+      /retries must be non-negative/,
+    )
+  })
 })
