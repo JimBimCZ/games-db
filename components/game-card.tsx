@@ -1,6 +1,8 @@
 import Image from 'next/image'
 import Link from 'next/link'
+import { StatusControl } from '@/components/library/status-control'
 import { formatMinor } from '@/lib/format/price'
+import type { LibraryStatus } from '@/lib/library/statuses'
 import type { GameCard as GameCardData } from '@/server/browse/queries'
 
 function PriceLine({ game }: { game: GameCardData }) {
@@ -29,28 +31,43 @@ function PriceLine({ game }: { game: GameCardData }) {
   )
 }
 
-export function GameCard({ game }: { game: GameCardData }) {
+export function GameCard({
+  game,
+  status,
+}: {
+  game: GameCardData
+  status?: LibraryStatus | null
+}) {
   return (
-    <Link
-      href={`/game/${game.appid}`}
-      className="group block rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-    >
-      {game.headerImage ? (
-        <Image
-          src={game.headerImage}
-          alt={game.name}
-          width={460}
-          height={215}
-          loading="lazy"
-          className="aspect-[460/215] w-full rounded-md border border-line object-cover"
-        />
-      ) : (
-        <div className="aspect-[460/215] w-full rounded-md border border-line bg-bg-panel" />
-      )}
-      <div className="pt-1.5">
-        <div className="truncate font-medium group-hover:text-accent">{game.name}</div>
-        <PriceLine game={game} />
-      </div>
-    </Link>
+    <div className="group relative">
+      {/* The link deliberately stops short of the whole card: a <select> inside an <a> is
+          invalid HTML and swallows its own clicks. */}
+      <Link
+        href={`/game/${game.appid}`}
+        className="block rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        {game.headerImage ? (
+          <Image
+            src={game.headerImage}
+            alt={game.name}
+            width={460}
+            height={215}
+            loading="lazy"
+            className="aspect-[460/215] w-full rounded-md border border-line object-cover"
+          />
+        ) : (
+          <div className="aspect-[460/215] w-full rounded-md border border-line bg-bg-panel" />
+        )}
+        <div className="pt-1.5">
+          <div className="truncate font-medium group-hover:text-accent">{game.name}</div>
+          <PriceLine game={game} />
+        </div>
+      </Link>
+      {status !== undefined ? (
+        <div className="absolute right-1.5 top-1.5">
+          <StatusControl appid={game.appid} status={status} title={game.name} variant="compact" />
+        </div>
+      ) : null}
+    </div>
   )
 }
