@@ -75,6 +75,16 @@ describe('parseSearchPage', () => {
   it('rejects an envelope that is not the shape we expect', () => {
     expect(() => parseSearchPage({ success: 1 })).toThrow()
   })
+
+  it('throws naming the appid when a row has no title span, rather than misattributing the next row', () => {
+    const html =
+      '<a data-ds-appid="1"><span class="title">Game One</span></a>' +
+      '<a data-ds-appid="2"><span class="notitle">Whoops</span></a>' +
+      '<a data-ds-appid="3"><span class="title">Game Three</span></a>'
+    expect(() =>
+      parseSearchPage({ success: 1, total_count: 3, start: 0, results_html: html }),
+    ).toThrow(/appid 2\b/)
+  })
 })
 
 const respondWith = (bodies: unknown[]) => {

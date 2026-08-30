@@ -64,10 +64,20 @@ export function parseSearchPage(raw: unknown): SearchPage {
   const page = pageSchema.parse(raw)
   const rows: SearchRow[] = []
 
-  for (const match of page.results_html.matchAll(
-    /data-ds-appid="(\d+)"[\s\S]*?<span class="title">([^<]*)<\/span>/g,
-  )) {
-    rows.push({ appid: Number(match[1]), name: decode(match[2]!.trim()) })
+  // Split on the row marker rather than matching appid and title with one lazy scan
+  // across the whole document: a lazy bridge between the two doesn't stop at a row
+  // boundary, so a row missing a title span let the scan skip forward into the next
+  // row's title, mis-attributing it and silently dropping that next row.
+  const segments = page.results_html.split('data-ds-appid="').slice(1)
+  for (const segment of segments) {
+    const appid = Number(/^\d+/.exec(segment)![0])
+    const titleMatch = /<span class="title">([^<]*)<\/span>/.exec(segment)
+    if (!titleMatch) {
+      throw new Error(
+        `store search row for appid ${appid} has no title span; the markup may have changed`,
+      )
+    }
+    rows.push({ appid, name: decode(titleMatch[1]!.trim()) })
   }
 
   return { rows, totalCount: page.total_count, start: page.start }
