@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseGenreId, parsePage, parseSearchQuery } from '@/server/browse/params'
+import { parseAppid, parseGenreId, parsePage, parseSearchQuery } from '@/server/browse/params'
 
 describe('parseSearchQuery', () => {
   it('trims and accepts a usable term', () => {
@@ -43,5 +43,24 @@ describe('parseGenreId', () => {
   it('rejects anything else', () => {
     expect(parseGenreId('23; drop table game')).toBeNull()
     expect(parseGenreId('')).toBeNull()
+  })
+})
+
+describe('parseAppid', () => {
+  it('accepts an in-range appid', () => {
+    expect(parseAppid('570')).toBe(570)
+  })
+
+  // game.appid is int4; a larger value reaches Postgres and raises 22003 rather than 404ing.
+  it('rejects a value past the int4 ceiling', () => {
+    expect(parseAppid('99999999999')).toBeNull()
+  })
+
+  it('rejects anything that is not a positive whole number', () => {
+    expect(parseAppid('0')).toBeNull()
+    expect(parseAppid('-5')).toBeNull()
+    expect(parseAppid('1.5')).toBeNull()
+    expect(parseAppid('abc')).toBeNull()
+    expect(parseAppid('')).toBeNull()
   })
 })

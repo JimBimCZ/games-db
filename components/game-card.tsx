@@ -7,7 +7,7 @@ function PriceLine({ game }: { game: GameCardData }) {
   if (game.isFree) return <div className="text-text-dim">Free</div>
 
   if (!game.price) {
-    // 232 of 552 hydrated games have no price row. A dash here would read as "free".
+    // 232 of 552 hydrated games are not free and have no price row. A dash here would read as "free".
     return game.releaseComingSoon && game.releaseDateText ? (
       <div className="text-text-dim">{game.releaseDateText}</div>
     ) : null

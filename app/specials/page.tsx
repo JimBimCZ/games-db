@@ -6,7 +6,7 @@ export default async function SpecialsPage() {
   return (
     <div className="p-6">
       <h1 className="mb-4 text-xl font-semibold tracking-tight">Specials</h1>
-      <CardGrid games={games} empty="No discounts are listed right now." />
+      <CardGrid games={games} empty="No discounted games have been filled in yet." />
     </div>
   )
 }

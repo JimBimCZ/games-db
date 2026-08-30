@@ -147,11 +147,14 @@ export async function sidebarGenres() {
 // something other than a sequential scan.
 export async function searchCards(q: string): Promise<GameCard[]> {
   const cc = countryCode()
+  // % and _ are ilike wildcards; escape them in the match pattern so a literal search term
+  // like "do_a" doesn't match "Dota 2". similarity() still scores against the raw term.
+  const pattern = `%${q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`
   const rows = await getDb()
     .select(cardColumns)
     .from(game)
     .leftJoin(price, and(eq(price.appid, game.appid), eq(price.cc, cc)))
-    .where(sql`${game.name} ilike '%' || ${q} || '%'`)
+    .where(sql`${game.name} ilike ${pattern} escape '\\'`)
     .orderBy(sql`similarity(${game.name}, ${q}) desc`, game.name)
     .limit(SEARCH_LIMIT)
   return rows.map(toGameCard)

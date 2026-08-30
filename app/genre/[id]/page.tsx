@@ -21,6 +21,7 @@ export default async function GenrePage({
   const raw = (await searchParams).page
   const page = parsePage(Array.isArray(raw) ? raw[0] : raw)
   const { cards, hasNext } = await genreCards(genreId, page)
+  if (page > 1 && cards.length === 0) notFound()
 
   return (
     <div className="p-6">

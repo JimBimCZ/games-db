@@ -1,5 +1,5 @@
 import { CardGrid } from '@/components/card-grid'
-import { parseSearchQuery } from '@/server/browse/params'
+import { SEARCH_MIN, parseSearchQuery } from '@/server/browse/params'
 import { searchCards } from '@/server/browse/queries'
 
 export default async function SearchPage({
@@ -14,7 +14,7 @@ export default async function SearchPage({
     return (
       <div className="p-6">
         <h1 className="mb-4 text-xl font-semibold tracking-tight">Search</h1>
-        <p className="text-text-dim">Type at least two characters to search.</p>
+        <p className="text-text-dim">Type at least {SEARCH_MIN} characters to search.</p>
       </div>
     )
   }

@@ -1,13 +1,15 @@
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { formatMinor } from '@/lib/format/price'
+import { parseAppid } from '@/server/browse/params'
 import { gameDetail } from '@/server/browse/queries'
 
 export default async function GamePage({ params }: { params: Promise<{ appid: string }> }) {
   const { appid } = await params
-  if (!/^\d+$/.test(appid)) notFound()
+  const parsedAppid = parseAppid(appid)
+  if (parsedAppid === null) notFound()
 
-  const detail = await gameDetail(Number(appid))
+  const detail = await gameDetail(parsedAppid)
   if (!detail) notFound()
 
   const { card, genres } = detail

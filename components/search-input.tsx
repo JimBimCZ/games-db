@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import { SEARCH_MIN } from '@/server/browse/params'
 
 export function SearchInput() {
   const router = useRouter()
@@ -13,7 +14,7 @@ export function SearchInput() {
     if (!typed.current) return
     const term = value.trim()
     const timer = setTimeout(() => {
-      if (term.length >= 2) router.push(`/search?q=${encodeURIComponent(term)}`)
+      if (term.length >= SEARCH_MIN) router.push(`/search?q=${encodeURIComponent(term)}`)
     }, 250)
     return () => clearTimeout(timer)
   }, [value, router])
