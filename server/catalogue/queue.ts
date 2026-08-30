@@ -4,6 +4,7 @@ import type { JobDb } from '../../db/client.ts'
 
 export const HYDRATE_LOCK_KEY = 4801001
 export const PRICES_LOCK_KEY = 4801002
+export const LISTS_LOCK_KEY = 4801003
 
 const FIFTEEN_MIN = 15 * 60_000
 const MAX_BACKOFF_MS = 24 * 60 * 60_000
