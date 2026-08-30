@@ -18,3 +18,10 @@ describe('resolveDriver', () => {
     expect(() => resolveDriver({ DB_DRIVER: 'mysql' })).toThrow(/Unsupported DB_DRIVER/)
   })
 })
+
+describe('closeDb', () => {
+  it('is safe to call when no client was ever created', async () => {
+    const { closeDb } = await import('@/db/client')
+    await expect(closeDb()).resolves.toBeUndefined()
+  })
+})

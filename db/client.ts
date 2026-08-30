@@ -3,7 +3,7 @@ import { neon } from '@neondatabase/serverless'
 import { drizzle as drizzleNeon } from 'drizzle-orm/neon-http'
 import { drizzle as drizzlePg, type NodePgDatabase } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
-import * as schema from './schema'
+import * as schema from './schema.ts'
 
 export type DriverName = 'neon-http' | 'node-postgres'
 
@@ -22,6 +22,9 @@ export function resolveDriver(env: Record<string, string | undefined>): DriverNa
   return env.VERCEL ? 'neon-http' : 'node-postgres'
 }
 
+let instance: Db | undefined
+let pool: Pool | undefined
+
 function createDb(): Db {
   const url = process.env.DATABASE_URL
   if (!url) throw new Error('DATABASE_URL is not set')
@@ -30,18 +33,23 @@ function createDb(): Db {
     return drizzleNeon(neon(url), { schema }) as unknown as Db
   }
 
-  const pool = new Pool({ connectionString: url })
+  pool = new Pool({ connectionString: url })
   // An unhandled 'error' on the Pool is an uncaught exception that kills the process: idle
   // clients emit it when the backend drops them, out of band from any query's try/catch.
   pool.on('error', (err) => console.error('postgres idle client error:', err.message))
   return drizzlePg(pool, { schema })
 }
 
-let instance: Db | undefined
-
 // next build evaluates route modules during page-data collection, so constructing at module
 // load fails any build without DATABASE_URL — including every Docker build stage.
 export function getDb(): Db {
   instance ??= createDb()
   return instance
+}
+
+// A CLI job holding an open pool never exits. Serverless callers never need this.
+export async function closeDb(): Promise<void> {
+  await pool?.end()
+  pool = undefined
+  instance = undefined
 }
