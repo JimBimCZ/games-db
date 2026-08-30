@@ -1,5 +1,5 @@
 import 'server-only'
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { connection } from 'next/server'
 import { getDb } from '../../db/client.ts'
 import {
@@ -10,6 +10,8 @@ import {
   gameMedia,
   genre,
   price,
+  priceHistory,
+  steamApp,
 } from '../../db/schema.ts'
 import { serverEnv } from '../env.ts'
 
@@ -54,6 +56,12 @@ export async function gameDetailFull(appid: number) {
       metacriticUrl: game.metacriticUrl,
       recommendationsTotal: game.recommendationsTotal,
       achievementsTotal: game.achievementsTotal,
+      supportedLanguagesRaw: game.supportedLanguagesRaw,
+      contentDescriptorNotes: game.contentDescriptorNotes,
+      dlcAppids: game.dlcAppids,
+      pcRequirements: game.pcRequirements,
+      macRequirements: game.macRequirements,
+      linuxRequirements: game.linuxRequirements,
       currency: price.currency,
       initialMinor: price.initialMinor,
       finalMinor: price.finalMinor,
@@ -66,7 +74,9 @@ export async function gameDetailFull(appid: number) {
 
   if (!row) return null
 
-  const [media, genres, categories] = await Promise.all([
+  const dlcAppids = row.dlcAppids ?? []
+
+  const [media, genres, categories, dlc, history] = await Promise.all([
     db
       .select({
         kind: gameMedia.kind,
@@ -93,7 +103,29 @@ export async function gameDetailFull(appid: number) {
       .innerJoin(category, eq(category.id, gameCategory.categoryId))
       .where(eq(gameCategory.appid, appid))
       .orderBy(category.description),
+    // One query for every DLC id, never one per id. Names come from steam_app, which the
+    // catalogue sync fills for all 61,890 DLC; game is joined only to learn whether the DLC
+    // has been hydrated far enough to have a page worth linking to. For Total War: WARHAMMER
+    // III that is 37 of 38 names against 0 hydrated.
+    dlcAppids.length > 0
+      ? db
+          .select({ appid: steamApp.appid, name: steamApp.name, hydratedAppid: game.appid })
+          .from(steamApp)
+          .leftJoin(game, eq(game.appid, steamApp.appid))
+          .where(inArray(steamApp.appid, dlcAppids))
+      : Promise.resolve([]),
+    db
+      .select({
+        observedAt: priceHistory.observedAt,
+        finalMinor: priceHistory.finalMinor,
+        currency: priceHistory.currency,
+      })
+      .from(priceHistory)
+      .where(and(eq(priceHistory.appid, appid), eq(priceHistory.cc, cc)))
+      .orderBy(asc(priceHistory.observedAt)),
   ])
+
+  const dlcRows = new Map(dlc.map((d) => [d.appid, d]))
 
   const { currency, initialMinor, finalMinor, discountPercent, ...detail } = row
   const priced =
@@ -105,5 +137,10 @@ export async function gameDetailFull(appid: number) {
     media: media as DetailMedia[],
     genres: genres.map((g) => g.description),
     categories: categories.map((c) => c.description),
+    dlc: dlcAppids.map((id) => {
+      const row = dlcRows.get(id)
+      return { appid: id, name: row?.name ?? null, hydrated: row?.hydratedAppid !== undefined && row?.hydratedAppid !== null }
+    }),
+    priceHistory: history,
   }
 }

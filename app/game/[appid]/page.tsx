@@ -1,5 +1,10 @@
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
+import { ContentNotesSection } from '@/components/detail/content-notes'
+import { DlcSection } from '@/components/detail/dlc-list'
+import { LanguageSection } from '@/components/detail/language-table'
+import { PriceChartSection } from '@/components/detail/price-chart'
+import { RequirementsSection } from '@/components/detail/requirements'
 import { MediaViewer } from '@/components/media-viewer'
 import { PriceCard } from '@/components/price-card'
 import { ReviewBar } from '@/components/review-bar'
@@ -89,6 +94,18 @@ export default async function GamePage({ params }: { params: Promise<{ appid: st
               />
             </section>
           ) : null}
+
+          <RequirementsSection
+            platforms={[
+              { label: 'Windows', raw: detail.pcRequirements },
+              { label: 'macOS', raw: detail.macRequirements },
+              { label: 'Linux', raw: detail.linuxRequirements },
+            ]}
+          />
+          <DlcSection dlc={detail.dlc} />
+          <LanguageSection raw={detail.supportedLanguagesRaw} />
+          <ContentNotesSection notes={detail.contentDescriptorNotes} />
+          <PriceChartSection history={detail.priceHistory} />
         </div>
 
         <aside className="flex flex-col gap-4 lg:sticky lg:top-6 lg:self-start">
