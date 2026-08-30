@@ -139,6 +139,7 @@ type GameCard = {
   name: string
   headerImage: string | null
   capsuleImage: string | null
+  shortDescription: string | null
   releaseDateText: string | null
   releaseComingSoon: boolean
   isFree: boolean
@@ -150,6 +151,9 @@ type GameCard = {
   } | null
 }
 ```
+
+`shortDescription` is on the card rather than in a separate query because the Discover hero
+is a card with prose next to it; no grid card renders it.
 
 `price` is genuinely nullable: only 262 of 552 games have a row, so the card renders
 correctly without one. Three states, and nothing else:
