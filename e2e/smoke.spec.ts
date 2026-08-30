@@ -37,6 +37,21 @@ test('discover leads to a list page, a card, and a detail page', async ({ page }
   await expect(page.getByRole('link', { name: 'View on Steam' })).toBeVisible()
 })
 
+// 570 is Dota 2: hydrated, free, and carrying both trailers and screenshots, so it
+// exercises the gallery's video branch. A game without a trailer opens on a screenshot
+// and never mounts a <video> at all.
+test('the detail page renders the gallery and its trailer', async ({ page }) => {
+  await page.goto('/game/570')
+  await expect(page.getByRole('heading', { level: 1, name: 'Dota 2' })).toBeVisible()
+
+  const media = page.getByRole('region', { name: 'Media for Dota 2' })
+  await expect(media.locator('video')).toBeVisible()
+  expect(await media.getByRole('button').count()).toBeGreaterThan(1)
+
+  await media.getByRole('button').nth(1).click()
+  await expect(media.getByRole('button').nth(1)).toHaveAttribute('aria-current', 'true')
+})
+
 test('the sidebar lists genres and a genre page renders', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('link', { name: 'Indie', exact: true }).click()
