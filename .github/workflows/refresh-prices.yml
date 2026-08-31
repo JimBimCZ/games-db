@@ -1,0 +1,46 @@
+name: Refresh prices
+
+# Monthly, not the 6h TTL_MS.price implies: this is a portfolio app and nothing on the read
+# path refreshes a stale price, so displayed prices are as old as the last run by design.
+# See docs/superpowers/specs/2026-08-31-scheduled-price-refresh-design.md §1.
+#
+# GitHub disables scheduled workflows after 60 days without repository activity. When that
+# happens the cron stops silently — re-enable it from the Actions tab.
+on:
+  schedule:
+    - cron: '0 3 1 * *'
+  workflow_dispatch:
+    inputs:
+      max_requests:
+        description: 'Stop after N batches of 100 appids (leave blank for a full sweep)'
+        required: false
+        type: string
+
+# The job already takes advisory lock 4801002 and exits quietly if another run holds it.
+# This keeps two runs from burning runner minutes to discover that.
+concurrency:
+  group: refresh-prices
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Refresh prices
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          MAX_REQUESTS: ${{ inputs.max_requests }}
+        run: |
+          if [ -n "$MAX_REQUESTS" ]; then
+            pnpm refresh:prices "--max-requests=$MAX_REQUESTS"
+          else
+            pnpm refresh:prices
+          fi
