@@ -72,8 +72,11 @@ on:
         required: false
         type: string
 
-# The job already takes advisory lock 4801002 and exits quietly if another run holds it.
-# This keeps two runs from burning runner minutes to discover that.
+# cancel-in-progress: false queues a second workflow run behind the first rather than
+# skipping or cancelling it, so both eventually execute — this only serialises two Actions
+# runs against each other. It gives no protection against the realistic collision, a human
+# running the CLI locally while the cron fires; that case rests entirely on advisory lock
+# 4801002 inside refreshPrices.
 concurrency:
   group: refresh-prices
   cancel-in-progress: false
@@ -82,8 +85,12 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -94,11 +101,19 @@ jobs:
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           MAX_REQUESTS: ${{ inputs.max_requests }}
+          # STEAM_COUNTRY_CODE is deliberately left unset so it falls through to the `cz`
+          # default in server/env.ts. If the Vercel deployment's default ever diverges, this
+          # job keeps refreshing rows under a `cc` no page reads, and nothing detects it.
         run: |
           if [ -n "$MAX_REQUESTS" ]; then
             pnpm refresh:prices "--max-requests=$MAX_REQUESTS"
           else
-            pnpm refresh:prices
+            # 1500s (25min) stays under the 30min job timeout so an unbounded sweep ends
+            # green with durable partial progress instead of being killed red every month.
+            # Progress is durable: applyPriceBatch commits one transaction per appid and
+            # stamps fetched_at, and selectStalePriceAppids orders oldest-fetched-first, so
+            # the next run picks up where this one stopped.
+            pnpm refresh:prices --max-duration=1500
           fi
 ```
 
@@ -106,9 +121,23 @@ Note on the `env:`/`if` shape: the dispatch input is passed through an environme
 
 - [ ] **Step 3: Verify the file parses as YAML**
 
-Run: `node -e "const {readFileSync}=require('node:fs');const s=readFileSync('.github/workflows/refresh-prices.yml','utf8');console.log(s.length+' bytes, '+s.split('\n').length+' lines')"`
+`js-yaml@4.3.2` is present in this repo (as a transitive dependency, under
+`node_modules/.pnpm/`, not hoisted to top-level `node_modules`), so parse with it directly
+rather than doing a byte/line smoke check:
 
-Expected: a byte and line count, no exception. (There is no YAML parser or `actionlint` in this repo — `which actionlint` returns not found — so this is a smoke check that the file exists and is readable. GitHub validates the workflow syntax itself on push, and Task 2 Step 1 confirms it registered.)
+```
+node -e "
+const yaml = require('./node_modules/.pnpm/js-yaml@4.3.2/node_modules/js-yaml');
+const {readFileSync} = require('node:fs');
+yaml.load(readFileSync('.github/workflows/refresh-prices.yml','utf8'));
+console.log('parsed ok');
+"
+```
+
+Expected: `parsed ok`, no exception. `actionlint` is genuinely absent from this repo —
+`which actionlint` returns not found — so this parse is the deepest static check available
+locally; GitHub validates the workflow schema itself on push, and Task 2 Step 1 confirms it
+registered.
 
 - [ ] **Step 4: Confirm no secret leaked into the file**
 
@@ -195,9 +224,44 @@ Expected: `max(fetched_at)` has moved to the time of the dispatched run. Because
 
 If `max(fetched_at)` did NOT move, the run touched only appids with no price row. Re-dispatch with `max_requests=45` to get past the null tail, and compare again.
 
-- [ ] **Step 6: Report the evidence**
+- [ ] **Step 6: Dispatch an unbounded run and measure the real cost**
 
-State plainly which of these was observed and which was not: the green run, the log line quoted verbatim, and the before/after `max(fetched_at)` values. Do not claim the monthly schedule itself fired — that cannot be observed until the 1st of the month, and saying so is the honest report.
+Neither `max_requests=3` nor `max_requests=45` exercises the path the monthly cron actually
+takes — the `else` branch running `pnpm refresh:prices --max-duration=1500` with no request
+cap. Exercise it once:
+
+Run: `gh workflow run "Refresh prices"` (no `-f max_requests`, so the input is unset)
+
+Then: `gh run watch` (or poll `gh run list --workflow="Refresh prices" --limit 1`)
+
+Once it finishes, read `gh run view --log` and record two numbers:
+- the job's real wall clock (the run duration shown by `gh run view` / the Actions UI, not
+  just the in-process timer in the `refresh:prices` log line)
+- the reported batch count from the `refreshed N prices (M changed) across B batches in X.Xs`
+  line
+
+This is the measurement that validates or refutes the design's `--max-duration=1500` and
+`timeout-minutes: 30` choices (spec §3, §6 gap 3), not a rerun of Steps 3–5. Only ~13,515
+non-free games exist in total, so a full sweep needs on the order of ~136 batches (100 appids
+each) to exhaust every one of them, not the ~1,300 that 1500s ÷ 1.13s/batch would suggest — the
+loop breaks on `appids.length === 0` once nothing stale is left, regardless of the time
+remaining. At the §2 upper bound of ~1.13s/batch that predicts a natural finish around 150s,
+far short of the 1500s cap, but that estimate has no write load in it and has never been
+checked against a real full-sweep run. So the two outcomes worth distinguishing are: the run
+finishes on its own well under 1500s (supports the bound as generous, maybe overly so), or it
+runs meaningfully longer than ~150s — which would mean per-batch write cost, backoff, or the
+NOT-IN-list growth (spec §4's named risk) is doing more than the §2 estimate accounted for, and
+is the thing to investigate before trusting the bound. A run that gets killed by
+`timeout-minutes` instead of stopping itself (on the duration bound or by exhausting the stale
+set) means the bound was set too loose relative to the 30-minute ceiling and needs a follow-up
+before the next scheduled run — do not paper over that result.
+
+- [ ] **Step 7: Report the evidence**
+
+State plainly which of these was observed and which was not: the green bounded run, the log
+line quoted verbatim, the before/after `max(fetched_at)` values, and the unbounded run's real
+wall clock and batch count from Step 6. Do not claim the monthly schedule itself fired — that
+cannot be observed until the 1st of the month, and saying so is the honest report.
 
 ---
 
@@ -213,8 +277,8 @@ State plainly which of these was observed and which was not: the green run, the 
 | §4 null tail accepted, not fixed | Task 2 Step 4's "that is a pass, not a failure" note |
 | §5 single secret, no `STEAM_API_KEY`, no driver override, no env echo | Global Constraints; Task 1 Steps 2 and 4; Task 2 Step 1 |
 | §5 rejected Vercel cron | No task by design — nothing to build |
-| §6 failure gaps | Task 1 Step 2 — both recorded as comments in the workflow |
-| §7 testing and acceptance evidence | Task 1 Step 5; Task 2 Steps 2–6 |
+| §6 failure gaps | Gaps 1–2 recorded as comments in the workflow (Task 1 Step 2); gaps 3–4 (unmeasured runner origin, no per-batch catch) are spec-only, accepted risks with no workflow-visible mitigation — Task 2 Step 6 is the first real observation of gap 3 |
+| §7 testing and acceptance evidence | Task 1 Step 5; Task 2 Steps 2–7 |
 
 No gaps.
 
