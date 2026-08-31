@@ -98,23 +98,45 @@ no-write batch    ~0.93s   (from the 3-batch run above, 2.8s from Actions)
 writing batch     ~32s     ((289.6s − 37×0.93s) / 8 batches) ≈ 320ms per appid
 ```
 
-~320ms per appid is the cost of `applyPriceBatch` opening **one transaction per appid**
-(`server/catalogue/prices.ts`) across an Azure-runner-to-Neon round trip. Projecting a full
+~320ms per appid is the cost of `applyPriceBatch` opening **one transaction per appid** — as
+it did until PR #30 (§2b) — across an Azure-runner-to-Neon round trip. Projecting a full
 sweep — 136 batches, ~37 empty then ~99 writing — gives **~53 minutes**.
 
 That projection is why `--max-duration=1500` exists. Without it the monthly run would exceed
 `timeout-minutes: 30`, be killed by GitHub, and be marked **failed every month**, turning the
 one failure signal this design has into noise. With it, a monthly run completes green after
-~25 minutes having refreshed roughly 45-47 batches, about 4,700 of the 9,935 priced rows.
+~25 minutes having refreshed roughly 45-47 batches, about 4,700 of the 9,935 priced rows —
+which would have meant each individual price was refreshed every two to three months, not
+every month.
 
-**So "monthly refresh" currently means each individual price is refreshed every two to three
-months**, not every month. Ordering is `fetched_at asc`, so the coverage rotates and nothing
-starves, but the honest description is the one above. The single change that would make the
-cadence mean what it says is folding a batch's 100 upserts into one transaction instead of
-100; that is application code and out of scope here.
+### 2b. After collapsing the upserts (PR #30)
 
-Still unmeasured: the sweep has never actually run to the `--max-duration` bound, so the clean
-green exit at 1500s is projected from the numbers above rather than observed.
+The measurement above is why PR #30 exists, and it supersedes the projection. `applyPriceBatch`
+now runs three statements per batch — one `select` of existing rows, one multi-row upsert, one
+multi-row history insert for the moved subset — instead of ~350. Same 45 batches, same 919
+prices written:
+
+```
+before   ~350 round trips/batch   289.6s   (Actions runner, run 33404206467)
+after    3 round trips/batch       44.6s   (local)
+```
+
+Those two runs are from different network origins, so the raw ratio flatters the change. The
+honest reading uses the origin-independent floor: 45 batches at the limiter's 1.2 req/s is
+~37s wherever it runs, so the new run is ~37s of unavoidable Steam requests plus **~7.6s of
+database work for 919 rows**, against ~252s for the same rows before. The storefront requests,
+not the database, are now the cost.
+
+That puts a full 136-batch sweep at roughly **4-6 minutes**, so the monthly run is expected to
+drain the whole stale set rather than stop at the bound. `--max-duration=1500` becomes a safety
+net rather than the thing that decides coverage, and "monthly refresh" means what it says.
+
+Still unmeasured, and the reason the paragraph above says "expected":
+
+- The post-#30 figure is from a local run. The same 45-batch shape has not been dispatched from
+  a runner, which is the only clean before/after comparison.
+- No sweep has ever run to completion, or to the `--max-duration` bound. Both the ~4-6 minute
+  projection and the clean green exit at 1500s are arithmetic, not observation.
 
 ## 3. The workflow
 
@@ -214,8 +236,9 @@ Four gaps are accepted and recorded rather than mitigated:
    holds the lock` and reports success. A collision doesn't require a manual run at the same
    *minute* — it requires overlap with the whole duration of one of the runs. Measured (§2a),
    the monthly run holds the advisory lock until the `--max-duration=1500` bound stops it, so
-   the collision window is **~25 minutes**, and would be ~53 minutes if the sweep ran to
-   completion. That is the real window a manual invocation has to land in.
+   the collision window was **~25 minutes** before PR #30 and is projected at ~4-6 minutes
+   after it (§2b) — the duration of a full sweep, since the bound is no longer what stops the
+   run. That is the real window a manual invocation has to land in.
 2. **GitHub disables scheduled workflows after 60 days of repository inactivity.** On a
    portfolio repo this will eventually happen, and the cron stops silently. This is noted in a
    comment in the workflow file so the next reader finds it; no keepalive is built.
