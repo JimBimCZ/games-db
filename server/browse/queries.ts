@@ -126,7 +126,11 @@ export async function genreCards(
     .innerJoin(gameGenre, eq(gameGenre.appid, game.appid))
     .leftJoin(price, and(eq(price.appid, game.appid), eq(price.cc, cc)))
     .where(eq(gameGenre.genreId, genreId))
-    .orderBy(sql`${game.releaseDate} desc nulls last`, game.name)
+    // Unreleased games dominate the hydrated catalogue — the queue walks
+    // steam_last_modified desc and unreleased store pages are edited constantly — and a
+    // 2027 date outranks every shipped game on release_date alone, so a genre page led
+    // with games nobody can buy yet.
+    .orderBy(game.releaseComingSoon, sql`${game.releaseDate} desc nulls last`, game.name)
     .limit(GENRE_PAGE_SIZE + 1)
     .offset((page - 1) * GENRE_PAGE_SIZE)
 
