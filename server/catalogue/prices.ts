@@ -1,5 +1,5 @@
 import 'server-only'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { getJobDb, type JobDb } from '../../db/client.ts'
 import { price, priceHistory } from '../../db/schema.ts'
 import { steamFetchJson } from '../steam/client.ts'
@@ -55,44 +55,60 @@ export async function applyPriceBatch(
   cc: string,
   now: Date,
 ): Promise<{ written: number; changed: number }> {
-  let written = 0
-  let changed = 0
+  const observed = [...prices].filter((entry): entry is [number, PriceOverview] => entry[1] !== null)
+  if (observed.length === 0) return { written: 0, changed: 0 }
 
-  for (const [appid, observed] of prices) {
-    if (!observed) continue
+  // Three statements for the whole batch, not three per appid. A transaction per appid cost
+  // ~320ms from a GitHub runner to Neon, which put a full sweep at ~53 minutes — past the
+  // scheduled job's own timeout. See the scheduled price refresh design doc §2a.
+  return db.transaction(async (tx) => {
+    const existing = await tx
+      .select()
+      .from(price)
+      .where(
+        and(
+          inArray(
+            price.appid,
+            observed.map(([appid]) => appid),
+          ),
+          eq(price.cc, cc),
+        ),
+      )
+    const previousByAppid = new Map(existing.map((row) => [row.appid, row]))
 
-    await db.transaction(async (tx) => {
-      const existing = await tx
-        .select()
-        .from(price)
-        .where(and(eq(price.appid, appid), eq(price.cc, cc)))
-        .limit(1)
-
-      const previous = existing[0]
-      const moved =
+    const moved = observed.filter(([appid, next]) => {
+      const previous = previousByAppid.get(appid)
+      return (
         !previous ||
-        previous.currency !== observed.currency ||
-        previous.initialMinor !== observed.initialMinor ||
-        previous.finalMinor !== observed.finalMinor ||
-        previous.discountPercent !== observed.discountPercent
-
-      await tx
-        .insert(price)
-        .values({ appid, cc, ...observed, fetchedAt: now })
-        .onConflictDoUpdate({
-          target: [price.appid, price.cc],
-          set: { ...observed, fetchedAt: now },
-        })
-      written += 1
-
-      if (moved) {
-        await tx.insert(priceHistory).values({ appid, cc, ...observed, observedAt: now })
-        changed += 1
-      }
+        previous.currency !== next.currency ||
+        previous.initialMinor !== next.initialMinor ||
+        previous.finalMinor !== next.finalMinor ||
+        previous.discountPercent !== next.discountPercent
+      )
     })
-  }
 
-  return { written, changed }
+    await tx
+      .insert(price)
+      .values(observed.map(([appid, next]) => ({ appid, cc, ...next, fetchedAt: now })))
+      .onConflictDoUpdate({
+        target: [price.appid, price.cc],
+        set: {
+          currency: sql`excluded.currency`,
+          initialMinor: sql`excluded.initial_minor`,
+          finalMinor: sql`excluded.final_minor`,
+          discountPercent: sql`excluded.discount_percent`,
+          fetchedAt: sql`excluded.fetched_at`,
+        },
+      })
+
+    if (moved.length > 0) {
+      await tx
+        .insert(priceHistory)
+        .values(moved.map(([appid, next]) => ({ appid, cc, ...next, observedAt: now })))
+    }
+
+    return { written: observed.length, changed: moved.length }
+  })
 }
 
 export type PriceCounts = { requested: number; written: number; changed: number; batches: number }
