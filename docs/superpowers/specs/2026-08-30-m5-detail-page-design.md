@@ -100,6 +100,18 @@ The observed shape for appid 570 is `{"minimum": "<strong>Minimum:</strong><br><
 and 222 of 552 games store `[]` for `mac_requirements`. Both shapes must parse without
 throwing.
 
+> **Superseded 2026-08-31 (PR #32).** The obligation stands; the way it is discharged does
+> not. Sanitising at render time meant importing `isomorphic-dompurify`, which pulls in
+> `jsdom`, into the request path — and `jsdom` cannot be loaded in Vercel's runtime. It is in
+> Next's default `serverExternalPackages`, so it is never bundled but `require`d at runtime,
+> where `html-encoding-sniffer` (CommonJS) requiring `@exodus/bytes`' ESM `encoding-lite.js`
+> throws `ERR_REQUIRE_ESM` during module evaluation. Every `/game/[appid]` request returned
+> 500. Node 24 permits `require(esm)`, so it reproduced only on the deployment.
+>
+> The fields are still stored unsanitised, and no renderer may inject them as HTML.
+> `parseRequirements()` now parses them into `{ label, value }` text lines, so the render path
+> carries no markup and needs no DOM sanitiser.
+
 ### 3.4 `supported_languages_raw` is a parseable string, not a list
 
 Appid 570, stored value (truncated):
@@ -134,6 +146,7 @@ misleading flat line. Real history accrues as `refresh:prices` runs on schedule.
 server/detail/queries.ts       gameDetailFull(appid) — every row the page needs
 lib/format/languages.ts        parseSupportedLanguages() — tested
 lib/format/requirements.ts     parseRequirements() shape guard + sanitise — tested
+                               (sanitise → parse into text lines, PR #32; see §3.3)
 lib/format/price-series.ts     buildPriceSeries() — tested
 components/media-viewer.tsx    'use client' — gallery + hls.js player
 components/review-bar.tsx      server
@@ -241,6 +254,10 @@ it with Zod against `{ minimum?: string, recommended?: string }`, and returns `n
 anything else — which covers the 222 `[]` values on mac and the 227 on linux. Each surviving
 string is passed through `DOMPurify.sanitize` **at render time**, discharging the obligation
 `map-app-details.ts:91-94` records.
+
+> **Superseded 2026-08-31 (PR #32):** each surviving string is now parsed into
+> `{ label, value }` lines and rendered as list items rather than injected as HTML. The
+> Zod shape guard and its `null` returns are unchanged. See §3.3 for why.
 
 One block per platform the game's `platforms` jsonb marks true and for which requirements
 actually parse, with minimum and recommended as sub-blocks.

@@ -160,6 +160,15 @@ the bodies are never fetched in the first place, not merely discarded after arri
 - `IStoreService/GetAppList` request/response shape (needs the key).
 - Whether `pg_trgm` is enabled by default on Neon (needed for fuzzy search).
 
+**Resolved since (2026-08-31):**
+
+- `IStoreService/GetAppList` — verified in M2. The shape is recorded in `CLAUDE.md`; the
+  index now holds 245,025 appids.
+- `pg_trgm` — enabled. `select extname, extversion from pg_extension` returns `pg_trgm 1.6`
+  on the project database, and `game_name_trgm_idx` backs the leading-wildcard `ilike` that
+  `searchCards` orders by `similarity()`.
+- The rate-limit ceiling is **still** unverified and stays on this list.
+
 ---
 
 ## 2. Decisions taken
@@ -339,6 +348,12 @@ five extra sections.
 **M6 — Library and wishlist.** Status control, transition history, price deltas.
 
 Each milestone lands as its own pull request, or several.
+
+**Status (2026-08-31): M1 through M6 are all merged, plus M3.5 (ranked browse lists), which
+this list predates.** There is no M7. Work since M6 has been catalogue coverage and
+correctness fixes, and one addition to the roadmap above: a monthly scheduled price refresh,
+designed in `2026-08-31-scheduled-price-refresh-design.md` and running as a GitHub Actions
+workflow. The catalogue and hydration jobs remain manual.
 
 ---
 
