@@ -32,6 +32,14 @@ export async function releaseAdvisoryLock(db: JobDb, key: number): Promise<void>
   await db.execute(sql`select pg_advisory_unlock(${key})`)
 }
 
+// Ordered oldest-appid-first, not newest-modified-first. Steam assigns appids
+// sequentially, so a low appid means an old app, which overwhelmingly means a released one:
+// measured over 5,007 hydrated games, 93.7% below appid 490k are released against 18.3%
+// above 4M. Unreleased store pages are edited constantly, so `steam_last_modified desc`
+// pointed the walk straight at the 4M+ band and left 72% of the catalogue unbuyable.
+// Nothing is lost by dropping recency here: this query only ever selects 'pending' and
+// 'failed' rows, so it is backfill ordering and never refresh, and new releases are already
+// hydrated first through the steam_list rank above.
 export async function selectDueApps(
   db: JobDb,
   opts: { limit: number; type?: 'game' | 'dlc' },
@@ -46,7 +54,7 @@ export async function selectDueApps(
       and (next_attempt_at is null or next_attempt_at <= now())
       ${typeFilter}
     order by listed.rank nulls last,
-             (app_type = 'game') desc, steam_last_modified desc nulls last, appid
+             (app_type = 'game') desc, appid
     limit ${opts.limit}
   `)
   return rows.map((r) => r.appid)
