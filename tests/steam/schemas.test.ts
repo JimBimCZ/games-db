@@ -54,6 +54,33 @@ describe('parseAppDetails', () => {
     })
   })
 
+  // appid 91700 (E.Y.E: Divine Cybermancy) returns success:true with header_image null while
+  // capsule_image is a string. Rejecting that lost the app permanently: a parse failure is
+  // marked 'failed' and retried on backoff, and the payload never changes.
+  it('accepts an explicit null in a string field the mapper already null-handles', () => {
+    const base = fixture('appdetails-620.json')['620'].data
+    const raw = {
+      '620': {
+        success: true,
+        data: {
+          ...base,
+          header_image: null,
+          capsule_image: null,
+          background_raw: null,
+          short_description: null,
+          about_the_game: null,
+          detailed_description: null,
+          supported_languages: null,
+        },
+      },
+    }
+    const result = parseAppDetails(raw, 620)
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.data.header_image).toBeNull()
+    expect(result.data.short_description).toBeNull()
+  })
+
   it('throws a SteamParseError naming the field when the shape changes', () => {
     const broken = { '620': { success: true, data: { steam_appid: '620', type: 'game', name: 'x' } } }
     try {

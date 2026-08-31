@@ -49,12 +49,17 @@ const appDetailsDataSchema = z.object({
   // Required, not defaulted: a missing is_free defaulting to false would make a genuine free
   // game look paid instead of surfacing as a parse failure.
   is_free: z.boolean(),
-  short_description: z.string().optional(),
-  about_the_game: z.string().optional(),
-  detailed_description: z.string().optional(),
-  header_image: z.string().optional(),
-  capsule_image: z.string().optional(),
-  background_raw: z.string().optional(),
+  // nullish, not optional: Steam sends an explicit null for these on some apps rather than
+  // omitting them — appid 91700 returns success:true with header_image null and capsule_image
+  // a string. .optional() admits absent but not null, so those apps failed to parse and were
+  // retried on backoff forever, since the payload never changes. The mapper already
+  // coalesces every one of these to null.
+  short_description: z.string().nullish(),
+  about_the_game: z.string().nullish(),
+  detailed_description: z.string().nullish(),
+  header_image: z.string().nullish(),
+  capsule_image: z.string().nullish(),
+  background_raw: z.string().nullish(),
   // coming_soon and date required, not defaulted: a missing coming_soon defaulting to false
   // would make an unreleased game look released. An empty date string still parses honestly;
   // it is the coming_soon default that would silently lie.
@@ -65,7 +70,7 @@ const appDetailsDataSchema = z.object({
   metacritic: z.object({ score: z.number().int(), url: z.string() }).optional(),
   recommendations: z.object({ total: z.number().int() }).optional(),
   achievements: z.object({ total: z.number().int() }).optional(),
-  supported_languages: z.string().optional(),
+  supported_languages: z.string().nullish(),
   content_descriptors: z
     .object({ ids: z.array(z.number().int()).default([]), notes: z.string().nullable().optional() })
     .optional(),
