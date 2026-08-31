@@ -1,19 +1,20 @@
-import { parseRequirements } from '@/lib/format/requirements'
+import { parseRequirements, type RequirementLine } from '@/lib/format/requirements'
 import { Section } from './section'
 
 type Platform = { label: string; raw: unknown }
 
-// Steam's own markup opens with "<strong>Minimum:</strong>" on 550 of 552 stored minimum
-// blocks and on all 448 recommended ones, so the heading below is a fallback for the handful
-// that arrive unlabelled rather than a second label stacked on the first.
-function Block({ heading, html }: { heading: string; html: string }) {
-  const selfLabelled = new RegExp(`^<strong>\\s*${heading}`, 'i').test(html)
-
+function Block({ heading, lines }: { heading: string; lines: RequirementLine[] }) {
   return (
     <div>
-      {selfLabelled ? null : <div className="font-medium">{heading}</div>}
-      {/* parseRequirements sanitised this; the stored value is raw Steam HTML. */}
-      <div className="steam-html text-text-dim" dangerouslySetInnerHTML={{ __html: html }} />
+      <div className="font-medium">{heading}</div>
+      <ul className="mt-1 list-disc pl-5 leading-relaxed text-text-dim">
+        {lines.map((line, index) => (
+          <li key={index}>
+            {line.label ? <span className="text-text">{line.label}: </span> : null}
+            {line.value}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -34,9 +35,11 @@ export function RequirementsSection({ platforms }: { platforms: Platform[] }) {
               {label}
             </div>
             <div className="mt-1 flex flex-col gap-3">
-              {requirements?.minimum ? <Block heading="Minimum" html={requirements.minimum} /> : null}
+              {requirements?.minimum ? (
+                <Block heading="Minimum" lines={requirements.minimum} />
+              ) : null}
               {requirements?.recommended ? (
-                <Block heading="Recommended" html={requirements.recommended} />
+                <Block heading="Recommended" lines={requirements.recommended} />
               ) : null}
             </div>
           </div>

@@ -51,8 +51,8 @@ test('the detail page renders the gallery and its trailer', async ({ page }) => 
   await media.getByRole('button').nth(1).click()
   await expect(media.getByRole('button').nth(1)).toHaveAttribute('aria-current', 'true')
 
-  // Requirements are stored unsanitised and sanitised at render, so their presence is worth
-  // asserting rather than assuming. Every hydrated game has pc_requirements.
+  // Requirements are stored as raw Steam HTML and parsed into text lines at render, so their
+  // presence is worth asserting rather than assuming. Every hydrated game has pc_requirements.
   await expect(page.getByRole('heading', { name: 'System requirements' })).toBeVisible()
   await expect(page.getByRole('heading', { name: /^Languages/ })).toBeVisible()
 })
