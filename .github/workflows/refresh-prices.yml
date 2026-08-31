@@ -1,0 +1,61 @@
+name: Refresh prices
+
+# Monthly, not the 6h TTL_MS.price implies: this is a portfolio app and nothing on the read
+# path refreshes a stale price, so displayed prices are as old as the last run by design.
+# See docs/superpowers/specs/2026-08-31-scheduled-price-refresh-design.md §1.
+#
+# GitHub disables scheduled workflows after 60 days without repository activity. When that
+# happens the cron stops silently — re-enable it from the Actions tab.
+on:
+  schedule:
+    - cron: '0 3 1 * *'
+  workflow_dispatch:
+    inputs:
+      max_requests:
+        description: 'Stop after N batches of 100 appids (leave blank for a full sweep)'
+        required: false
+        type: string
+
+# cancel-in-progress: false queues a second workflow run behind the first rather than
+# skipping or cancelling it, so both eventually execute — this only serialises two Actions
+# runs against each other. It gives no protection against the realistic collision, a human
+# running the CLI locally while the cron fires; that case rests entirely on advisory lock
+# 4801002 inside refreshPrices.
+concurrency:
+  group: refresh-prices
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Refresh prices
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          MAX_REQUESTS: ${{ inputs.max_requests }}
+          # STEAM_COUNTRY_CODE is deliberately left unset so it falls through to the `cz`
+          # default in server/env.ts. If the Vercel deployment's default ever diverges, this
+          # job keeps refreshing rows under a `cc` no page reads, and nothing detects it.
+        run: |
+          if [ -n "$MAX_REQUESTS" ]; then
+            pnpm refresh:prices "--max-requests=$MAX_REQUESTS"
+          else
+            # 1500s (25min) stays under the 30min job timeout so an unbounded sweep ends
+            # green with durable partial progress instead of being killed red every month.
+            # Progress is durable: applyPriceBatch commits one transaction per appid and
+            # stamps fetched_at, and selectStalePriceAppids orders oldest-fetched-first, so
+            # the next run picks up where this one stopped.
+            pnpm refresh:prices --max-duration=1500
+          fi
