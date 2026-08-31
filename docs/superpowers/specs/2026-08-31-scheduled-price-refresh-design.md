@@ -1,7 +1,7 @@
 # Scheduled price refresh — Design
 
 Date: 2026-08-31
-Status: approved for implementation planning
+Status: implemented and merged (PR #28, 2026-08-31). §2a and §7 record post-merge measurements.
 
 M1–M6 are merged and the app is deployed, but nothing keeps its data current. `vercel.json`
 carries no `crons`, CI runs only lint/typecheck/test/build, and every catalogue job is a
@@ -69,6 +69,53 @@ game where is_free = false                                  13,515
   … with a price row older than TTL_MS.price (6h)            1,868
 ```
 
+### 2a. The write path, measured from Actions (2026-08-31, post-merge)
+
+The figures above are all from the no-write path. The write path was first executed on
+2026-08-31 by dispatched run
+[33404206467](https://github.com/JimBimCZ/games-db/actions/runs/33404206467), from a
+GitHub-hosted runner against production:
+
+```
+refreshed 919 prices (41 changed) across 45 batches in 289.6s
+```
+
+Reconciled against the database, which is what makes this evidence rather than a log line:
+
+```
+price rows          9,905 → 9,935      max(fetched_at) 13:42:08 → 14:47:38 (the run's own stamp)
+price_history       9,922 → 9,963      +41, exactly the run's reported `changed`
+fetched_at within 15 min of the run     919, exactly the run's reported `written`
+non-free games with no price row  3,611 → 3,581
+```
+
+Two things follow. First, the never-priceable tail of §4 is not inert: 30 of those appids
+gained a price row, so Steam does eventually price some of them and the tail shrinks slowly on
+its own. Second, and load-bearing for §3's bound:
+
+```
+no-write batch    ~0.93s   (from the 3-batch run above, 2.8s from Actions)
+writing batch     ~32s     ((289.6s − 37×0.93s) / 8 batches) ≈ 320ms per appid
+```
+
+~320ms per appid is the cost of `applyPriceBatch` opening **one transaction per appid**
+(`server/catalogue/prices.ts`) across an Azure-runner-to-Neon round trip. Projecting a full
+sweep — 136 batches, ~37 empty then ~99 writing — gives **~53 minutes**.
+
+That projection is why `--max-duration=1500` exists. Without it the monthly run would exceed
+`timeout-minutes: 30`, be killed by GitHub, and be marked **failed every month**, turning the
+one failure signal this design has into noise. With it, a monthly run completes green after
+~25 minutes having refreshed roughly 45-47 batches, about 4,700 of the 9,935 priced rows.
+
+**So "monthly refresh" currently means each individual price is refreshed every two to three
+months**, not every month. Ordering is `fetched_at asc`, so the coverage rotates and nothing
+starves, but the honest description is the one above. The single change that would make the
+cadence mean what it says is folding a batch's 100 upserts into one transaction instead of
+100; that is application code and out of scope here.
+
+Still unmeasured: the sweep has never actually run to the `--max-duration` bound, so the clean
+green exit at 1500s is projected from the numbers above rather than observed.
+
 ## 3. The workflow
 
 New file `.github/workflows/refresh-prices.yml`. Runner setup mirrors `ci.yml` exactly:
@@ -97,6 +144,10 @@ step, which is the main reason this design chose Actions over a Vercel cron rout
 `price` row at all — Steam prices them nowhere, the case the code already documents against
 appid 271590 — and because no row exists, a completed run cannot stamp `fetched_at` to move
 them out of the window. Only the in-run `seen` set makes the loop terminate.
+
+"Prices them nowhere" is true of the tail as a set, not permanently of each member: §2a
+observed 30 of these appids gaining a price row in a single run, so the tail drains slowly as
+Steam prices previously-unpriced apps. It shrinks; it does not clear.
 
 Every run therefore opens with ~37 batches that write nothing, which is exactly what the §2
 probe observed. At monthly cadence this is ~31s of wasted requests twelve times a year.
@@ -161,9 +212,10 @@ Four gaps are accepted and recorded rather than mitigated:
 
 1. **A lock-contended run exits 0 having done nothing.** It logs `another refresh:prices run
    holds the lock` and reports success. A collision doesn't require a manual run at the same
-   *minute* — it requires overlap with the whole duration of one of the runs, and an unbounded
-   or `--max-duration=1500` run can occupy the advisory lock for 20–25 minutes. That is the real
-   window a manual invocation has to land in to collide with the monthly cron.
+   *minute* — it requires overlap with the whole duration of one of the runs. Measured (§2a),
+   the monthly run holds the advisory lock until the `--max-duration=1500` bound stops it, so
+   the collision window is **~25 minutes**, and would be ~53 minutes if the sweep ran to
+   completion. That is the real window a manual invocation has to land in.
 2. **GitHub disables scheduled workflows after 60 days of repository inactivity.** On a
    portfolio repo this will eventually happen, and the cron stops silently. This is noted in a
    comment in the workflow file so the next reader finds it; no keepalive is built.
@@ -174,8 +226,11 @@ Four gaps are accepted and recorded rather than mitigated:
    a runner is unobserved — exactly the situation CLAUDE.md's rule against hardcoding an
    unverified rate limit is about. If it isn't safe, the failure is at least visible:
    `steamFetchJson` retries a 429 up to three times with backoff before throwing, and
-   `prices-cli.mts` sets `process.exitCode = 1` on that throw, reddening the run. Task 2's
-   first dispatched run from Actions is the first chance to actually observe this.
+   `prices-cli.mts` sets `process.exitCode = 1` on that throw, reddening the run.
+   **First observation (2026-08-31, §2a):** 45 consecutive storefront batches at the default
+   1.2 req/s from a GitHub-hosted runner completed with no 429 and no retry. That is a floor,
+   not a clearance — 45 requests is a fraction of a full sweep's ~136, and runner IPs vary
+   between jobs, so a future run from a differently-reputed Azure address may still be limited.
 4. **One failed batch aborts the entire sweep.** `refreshPrices`'s loop has no per-batch
    `catch`; a throw from `steamFetchJson` or `applyPriceBatch` propagates straight out through
    the `finally` that releases the advisory lock, up to the CLI, which exits 1. At monthly
@@ -190,14 +245,19 @@ The deliverable is CI configuration, not application code, so it gets no unit te
 with this repository's stance on cheap tests. `pnpm lint`, `pnpm typecheck` and `pnpm build` are
 run to confirm nothing regressed, though no file they cover is touched.
 
-Acceptance evidence, gathered after merge:
+Acceptance evidence, gathered after merge on 2026-08-31:
 
-1. A `workflow_dispatch` run with `max_requests: 3`, green, with its log pasted.
-2. `select count(*), max(fetched_at) from price` before and after that run, showing the
-   scheduled path wrote to the real database.
-3. A `workflow_dispatch` run with no `max_requests` input — the unbounded, `--max-duration=1500`
-   path the monthly cron actually takes — with its real wall clock and reported batch count
-   recorded, as the first observation bearing on §6 gap 3.
+1. ✅ A `workflow_dispatch` run with `max_requests: 3`, green:
+   `refreshed 0 prices (0 changed) across 3 batches in 2.8s` — zero written, exactly as §4
+   predicts for the null tail. Run
+   [33404114374](https://github.com/JimBimCZ/games-db/actions/runs/33404114374).
+2. ✅ `select count(*), max(fetched_at) from price` before and after. The 3-batch run moved
+   nothing (its 300 appids have no price row to stamp), so a 45-batch run was dispatched to
+   reach past the tail; §2a records both the log line and the database reconciliation that
+   prove the scheduled path wrote to production.
+3. ❌ **Not gathered.** A run with no `max_requests` input — the path the monthly cron actually
+   takes — has never been dispatched. §2a projects its behaviour from the 45-batch measurement
+   rather than observing it. The first monthly fire on 2026-09-01 is the next opportunity.
 
-None of these can be produced before the workflow is on the default branch, since `schedule`
+None of these could be produced before the workflow was on the default branch, since `schedule`
 and `workflow_dispatch` only run from there.
