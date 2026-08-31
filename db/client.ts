@@ -37,6 +37,16 @@ function createDb(): Db {
   // An unhandled 'error' on the Pool is an uncaught exception that kills the process: idle
   // clients emit it when the backend drops them, out of band from any query's try/catch.
   pool.on('error', (err) => console.error('postgres idle client error:', err.message))
+  // The pool's handler above covers idle clients only — pg-pool removes its idle listener on
+  // checkout and restores it on release, so a client is listener-less for the whole time a
+  // query or transaction holds it. A connection dying in that window killed a 4-hour hydrate
+  // run. Catching the query is not enough: client.js emits 'error' in addition to rejecting
+  // the in-flight query, so the reject is caught and the process still dies. This listener is
+  // attached at connect and survives for the client's lifetime, because pg-pool only ever
+  // removes its own listener by reference.
+  pool.on('connect', (client) => {
+    client.on('error', (err) => console.error('postgres client error:', err.message))
+  })
   return drizzlePg(pool, { schema })
 }
 
