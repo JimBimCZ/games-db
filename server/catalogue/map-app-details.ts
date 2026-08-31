@@ -3,8 +3,8 @@ import DOMPurify from 'isomorphic-dompurify'
 import type { game, gameMedia, price } from '@/db/schema.ts'
 import type { AppDetails } from '@/server/steam/schemas.ts'
 
-const sanitize = (html: string | undefined): string | null =>
-  html === undefined ? null : DOMPurify.sanitize(html)
+const sanitize = (html: string | null | undefined): string | null =>
+  html == null ? null : DOMPurify.sanitize(html)
 
 const MONTH_ABBREVIATIONS: Record<string, number> = {
   jan: 0,
