@@ -117,26 +117,29 @@ multi-row history insert for the moved subset — instead of ~350. Same 45 batch
 prices written:
 
 ```
-before   ~350 round trips/batch   289.6s   (Actions runner, run 33404206467)
-after    3 round trips/batch       44.6s   (local)
+before   ~350 round trips/batch   289.6s   (Actions runner, run 33404206467, 919 written)
+after    3 round trips/batch       38.2s   (Actions runner, run 33406449365, 921 written)
 ```
 
-Those two runs are from different network origins, so the raw ratio flatters the change. The
-honest reading uses the origin-independent floor: 45 batches at the limiter's 1.2 req/s is
-~37s wherever it runs, so the new run is ~37s of unavoidable Steam requests plus **~7.6s of
-database work for 919 rows**, against ~252s for the same rows before. The storefront requests,
-not the database, are now the cost.
+Both runs are from a GitHub-hosted runner with the same batch count, so this is a like-for-like
+comparison and not an origin artefact: **7.6× faster**. 38.2s is within a second or so of the
+origin-independent request floor — 45 batches at the limiter's 1.2 req/s is ~37s wherever it
+runs — which means the database work has collapsed from ~252s to roughly a second. **The
+storefront requests, not the database, are now the entire cost of a sweep.**
 
-That puts a full 136-batch sweep at roughly **4-6 minutes**, so the monthly run is expected to
-drain the whole stale set rather than stop at the bound. `--max-duration=1500` becomes a safety
-net rather than the thing that decides coverage, and "monthly refresh" means what it says.
+The second run reconciles against the database the same way the first did: 921 written and 2
+changed, `price` 9,935 → 9,937, `price_history` 9,963 → 9,965, both new history rows stamped
+inside the run's window.
 
-Still unmeasured, and the reason the paragraph above says "expected":
+Since a batch is now request-bound, a full 136-batch sweep projects to **~2 minutes**, against
+~53 minutes before. The monthly run is expected to drain the whole stale set;
+`--max-duration=1500` becomes a safety net rather than the thing that decides coverage, and
+"monthly refresh" means what it says.
 
-- The post-#30 figure is from a local run. The same 45-batch shape has not been dispatched from
-  a runner, which is the only clean before/after comparison.
-- No sweep has ever run to completion, or to the `--max-duration` bound. Both the ~4-6 minute
-  projection and the clean green exit at 1500s are arithmetic, not observation.
+Still unmeasured, and the reason the paragraph above says "expected": no sweep has ever run to
+completion, or to the `--max-duration` bound. Both the ~2 minute projection and the clean green
+exit at 1500s are arithmetic, not observation. The first scheduled fire on 2026-09-01 is the
+first run that would drain the set.
 
 ## 3. The workflow
 
@@ -236,9 +239,9 @@ Four gaps are accepted and recorded rather than mitigated:
    holds the lock` and reports success. A collision doesn't require a manual run at the same
    *minute* — it requires overlap with the whole duration of one of the runs. Measured (§2a),
    the monthly run holds the advisory lock until the `--max-duration=1500` bound stops it, so
-   the collision window was **~25 minutes** before PR #30 and is projected at ~4-6 minutes
-   after it (§2b) — the duration of a full sweep, since the bound is no longer what stops the
-   run. That is the real window a manual invocation has to land in.
+   the collision window was **~25 minutes** before PR #30 and is projected at ~2 minutes after
+   it (§2b) — the duration of a full sweep, since the bound is no longer what stops the run.
+   That is the real window a manual invocation has to land in.
 2. **GitHub disables scheduled workflows after 60 days of repository inactivity.** On a
    portfolio repo this will eventually happen, and the cron stops silently. This is noted in a
    comment in the workflow file so the next reader finds it; no keepalive is built.
