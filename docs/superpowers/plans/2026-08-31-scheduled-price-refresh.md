@@ -1,6 +1,6 @@
 # Scheduled Price Refresh Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Run the existing `pnpm refresh:prices` job automatically once a month via GitHub Actions, so the deployed app's prices stop depending on someone remembering to run a CLI.
 
@@ -9,6 +9,13 @@
 **Tech Stack:** GitHub Actions, pnpm 11.24.0, Node 24, the existing `server/catalogue/prices-cli.mts` entry point.
 
 **Spec:** `docs/superpowers/specs/2026-08-31-scheduled-price-refresh-design.md`
+
+> **Completed 2026-08-31.** Task 1 landed the workflow in PR #28, with the bounding and
+> review fixes in the same PR. Task 2's evidence is written up in the spec §2: PR #29 records
+> the first dispatched run reconciled against the database, PR #30 collapsed the per-appid
+> transactions the measurement exposed, and PR #31 replaced the local timing with a
+> like-for-like runner comparison. The monthly schedule itself has not been observed firing —
+> that cannot happen until the 1st of a month.
 
 ## Global Constraints
 
@@ -43,13 +50,13 @@ One file, so there is one implementation task. Task 2 is the post-merge verifica
 - Consumes: the `refresh:prices` script in `package.json`, which runs `node --conditions=react-server server/catalogue/prices-cli.mts`. That CLI accepts `--max-requests=<positive number>` and `--max-duration=<positive seconds>`; both are optional and unbounded when absent.
 - Produces: a workflow named `Refresh prices` with a `workflow_dispatch` input `max_requests` (string, optional), which Task 2 dispatches.
 
-- [ ] **Step 1: Read the file being mirrored**
+- [x] **Step 1: Read the file being mirrored**
 
 Run: `cat .github/workflows/ci.yml`
 
 Confirm the runner setup block matches what Step 2 reproduces. If `ci.yml` has changed (different action versions or node version), match the file as it actually is, not as this plan quotes it.
 
-- [ ] **Step 2: Create the workflow file**
+- [x] **Step 2: Create the workflow file**
 
 Create `.github/workflows/refresh-prices.yml` with exactly this content:
 
@@ -119,7 +126,7 @@ jobs:
 
 Note on the `env:`/`if` shape: the dispatch input is passed through an environment variable rather than interpolated straight into the `run:` script, so a value typed into the dispatch form cannot be substituted into the shell command as code.
 
-- [ ] **Step 3: Verify the file parses as YAML**
+- [x] **Step 3: Verify the file parses as YAML**
 
 `js-yaml@4.3.2` is present in this repo (as a transitive dependency, under
 `node_modules/.pnpm/`, not hoisted to top-level `node_modules`), so parse with it directly
@@ -139,26 +146,26 @@ Expected: `parsed ok`, no exception. `actionlint` is genuinely absent from this 
 locally; GitHub validates the workflow schema itself on push, and Task 2 Step 1 confirms it
 registered.
 
-- [ ] **Step 4: Confirm no secret leaked into the file**
+- [x] **Step 4: Confirm no secret leaked into the file**
 
 Run: `grep -nE 'postgres(ql)?://|npg_|password|sslmode' .github/workflows/refresh-prices.yml`
 
 Expected: no output. Any match means a real connection string was pasted in — remove it before committing.
 
-- [ ] **Step 5: Run the repo checks**
+- [x] **Step 5: Run the repo checks**
 
 Run: `pnpm lint && pnpm typecheck && pnpm build`
 
 Expected: all three pass. No file they cover was touched, so this confirms nothing regressed rather than testing the new file. Paste the actual output — do not report a result you did not run.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add .github/workflows/refresh-prices.yml
 git commit -m "Refresh prices monthly on a schedule"
 ```
 
-- [ ] **Step 7: Push and open the PR**
+- [x] **Step 7: Push and open the PR**
 
 ```bash
 git push -u origin docs/scheduled-price-refresh
@@ -178,7 +185,7 @@ The branch already carries the spec commit (`f616f21`), so the PR contains both 
 
 This task CANNOT start until the PR is merged: `schedule` and `workflow_dispatch` only run from the default branch.
 
-- [ ] **Step 1: Add the secret, then confirm the workflow registered**
+- [x] **Step 1: Add the secret, then confirm the workflow registered**
 
 The human partner adds the repository secret — the agent must not handle the connection string:
 
@@ -192,7 +199,7 @@ Then run: `gh secret list` and `gh workflow list`
 
 Expected: `DATABASE_URL_UNPOOLED` appears in the secret list, and `Refresh prices` appears in the workflow list.
 
-- [ ] **Step 2: Record the before state**
+- [x] **Step 2: Record the before state**
 
 Run this against the database and keep the output:
 
@@ -200,7 +207,7 @@ Run this against the database and keep the output:
 select count(*) as rows, max(fetched_at)::text as newest from price;
 ```
 
-- [ ] **Step 3: Dispatch a bounded run**
+- [x] **Step 3: Dispatch a bounded run**
 
 Run: `gh workflow run "Refresh prices" -f max_requests=3`
 
@@ -208,7 +215,7 @@ Then: `gh run watch` (or `gh run list --workflow="Refresh prices" --limit 1`)
 
 Expected: the run completes green. Three batches is ~4 seconds of work plus install time.
 
-- [ ] **Step 4: Read the run log**
+- [x] **Step 4: Read the run log**
 
 Run: `gh run view --log` (select the run, or pass its id from `gh run list`)
 
@@ -216,7 +223,7 @@ Expected: a line of the form `refreshed N prices (M changed) across 3 batches in
 
 Note what the spec §4 predicts: the sweep opens with ~37 batches of appids that have no `price` row, so a 3-batch run will very likely report `refreshed 0 prices`. **That is a pass, not a failure** — it proves the job ran, reached Steam, and completed. Do not "fix" it.
 
-- [ ] **Step 5: Prove it reached the real database**
+- [x] **Step 5: Prove it reached the real database**
 
 Re-run the Step 2 query and compare.
 
@@ -224,7 +231,7 @@ Expected: `max(fetched_at)` has moved to the time of the dispatched run. Because
 
 If `max(fetched_at)` did NOT move, the run touched only appids with no price row. Re-dispatch with `max_requests=45` to get past the null tail, and compare again.
 
-- [ ] **Step 6: Dispatch an unbounded run and measure the real cost**
+- [x] **Step 6: Dispatch an unbounded run and measure the real cost**
 
 Neither `max_requests=3` nor `max_requests=45` exercises the path the monthly cron actually
 takes — the `else` branch running `pnpm refresh:prices --max-duration=1500` with no request
@@ -256,7 +263,7 @@ is the thing to investigate before trusting the bound. A run that gets killed by
 set) means the bound was set too loose relative to the 30-minute ceiling and needs a follow-up
 before the next scheduled run — do not paper over that result.
 
-- [ ] **Step 7: Report the evidence**
+- [x] **Step 7: Report the evidence**
 
 State plainly which of these was observed and which was not: the green bounded run, the log
 line quoted verbatim, the before/after `max(fetched_at)` values, and the unbounded run's real
