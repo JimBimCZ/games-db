@@ -90,8 +90,8 @@ export function mapGameRow(data: AppDetails, fetchedAt: Date): typeof game.$infe
     // narrowing it here. They are stored EXACTLY as Steam sent them and are NOT run through
     // sanitize() — their embedded HTML (min/recommended requirement text) lives inside an
     // unknown shape, and walking that shape to find and sanitise it would put shape-guessing
-    // machinery in this mapper. This is a deliberate exemption, not an oversight: any renderer
-    // that puts these fields on the page MUST sanitise them at render time.
+    // machinery in this mapper. This is a deliberate exemption, not an oversight: no renderer
+    // may inject these fields as HTML. lib/format/requirements.ts parses them into text lines.
     pcRequirements: data.pc_requirements ?? null,
     macRequirements: data.mac_requirements ?? null,
     linuxRequirements: data.linux_requirements ?? null,

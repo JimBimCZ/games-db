@@ -103,9 +103,11 @@ export default async function GamePage({ params }: { params: Promise<{ appid: st
                 About this game
               </h2>
               {/* about_html was sanitised by the hydration job before it was cached
-                  (map-app-details.ts), which is what makes this safe. The requirements
-                  fields in the same row were deliberately not, and must be sanitised at
-                  render time when M5's second PR adds them. */}
+                  (map-app-details.ts), which is what makes this safe. It is the only field
+                  on this page injected as HTML: the requirements fields, stored unsanitised
+                  by the same job, are parsed into text lines instead (lib/format/
+                  requirements.ts), because a DOM sanitiser needs jsdom and jsdom cannot be
+                  required in Vercel's runtime. */}
               <div
                 className="steam-html mt-2 max-w-2xl"
                 dangerouslySetInnerHTML={{ __html: detail.aboutHtml }}
