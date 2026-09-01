@@ -18,7 +18,12 @@ export async function Toolbar() {
         <ThemeToggle />
         {session?.user ? (
           <>
-            <span className="text-text-dim">{session.user.name ?? session.user.email}</span>
+            <Link
+              className="rounded-sm text-text-dim hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              href="/account"
+            >
+              {session.user.name ?? session.user.email}
+            </Link>
             <form action={signOutAction}>
               <button
                 type="submit"
