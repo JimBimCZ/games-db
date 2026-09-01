@@ -1,3 +1,4 @@
+import { Footer } from '@/components/footer'
 import { Sidebar } from '@/components/sidebar'
 import { Toolbar } from '@/components/toolbar'
 
@@ -16,6 +17,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main id="main" className="flex-1">
           {children}
         </main>
+        <Footer />
       </div>
     </div>
   )
