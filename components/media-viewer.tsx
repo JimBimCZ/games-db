@@ -114,8 +114,8 @@ export function MediaViewer({ media, title }: { media: DetailMedia[]; title: str
                   <Image
                     src={item.thumbnailUrl}
                     alt={label}
-                    width={160}
-                    height={90}
+                    width={96}
+                    height={54}
                     loading="lazy"
                     className="h-[54px] w-[96px] object-cover"
                   />
